@@ -7,4 +7,6 @@ cd iblenv
 
 pip install -r requirements.txt --upgrade
 
-pip install -U --no-cache-dir -U --ignore-installed wavpack-numcodecs==0.1.3 numba==0.56.3 neo==0.11.1 probeinterface==0.2.13 spikeinterface[full,widgets]==0.96.0
+pip install -U --no-cache-dir -U --ignore-installed wavpack-numcodecs==0.1.3 numba==0.56.3 spikeinterface[full,widgets]==0.98.2
+
+pip install ome_zarr

@@ -2,12 +2,17 @@ from pathlib import Path
 import logging
 
 from tqdm import tqdm
-import spikeglx
+
 import numpy as np
 from neurodsp import fourier, utils
 from scipy import signal
 import one.alf.io as alfio
 import ibllib.ephys.ephysqc as ephysqc
+
+import spikeinterface as si
+import spikeinterface.extractors as se
+import spikeinterface.sorters as ss
+import spikeinterface.preprocessing as spre
 
 from phylib.io import alf
 
