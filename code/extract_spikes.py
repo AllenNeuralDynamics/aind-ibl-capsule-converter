@@ -1,0 +1,140 @@
+import numpy as np
+from pathlib import Path
+import shutil
+import os
+import glob
+
+import spikeinterface as si
+import spikeinterface.extractors as se
+from spikeinterface.exporters import export_to_phy
+
+
+# set up directories
+
+sorting_folder = Path(glob.glob('/data/ecephys_*sorted*')[0])
+
+session_folder = Path(str(sorting_folder).split('_sorted')[0])
+scratch_folder = Path('/scratch')
+results_folder = Path('/results')
+
+ecephys_folder = session_folder / "ecephys_clipped"
+ecephys_compressed_folder = session_folder / 'ecephys_compressed'
+
+sorting_curated_folder = sorting_folder / "sorting_precurated"
+postprocessed_folder = sorting_folder / 'postprocessed'
+
+# extract stream names
+
+stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
+
+neuropix_streams = [s for s in stream_names if 'Neuropix' in s]
+probe_names = [s.split('.')[1].split('-')[0] for s in neuropix_streams]
+
+RMS_WIN_LENGTH_SECS = 3
+WELCH_WIN_LENGTH_SAMPLES = 1024
+
+for idx, stream_name in enumerate(neuropix_streams):
+    
+    if '-LFP' in stream_name:
+        continue
+        
+    print(stream_name)
+    
+    probe_name = probe_names[idx]
+
+    output_folder = results_folder / probe_name
+
+    if not os.path.exists(output_folder):
+        os.mkdir(output_folder)
+
+    print('Loading waveforms...')
+    we_recless = si.load_waveforms(postprocessed_folder / f'experiment1_{stream_name}_recording1', 
+                               with_recording=False)
+    
+    channel_inds = np.array([int(name[2:])-1 for name in we_recless.channel_ids])
+    
+    phy_folder = scratch_folder / f"{postprocessed_folder.parent.name}_phy"
+    
+    print('Exporting to phy format...')
+    export_to_phy(we_recless, 
+                   output_folder=phy_folder,
+                   compute_pc_features=False,
+                   remove_if_exists=True,
+                   copy_binary=False)
+    
+    spike_locations = we_recless.load_extension("spike_locations").get_data()
+    spike_depths = spike_locations["y"]
+
+    print('Converting data...')
+    # convert clusters and squeeze
+    clusters = np.load(phy_folder / "spike_clusters.npy")
+    np.save(phy_folder / "spike_clusters.npy",
+            np.squeeze(clusters.astype('uint32')))
+    
+    # convert times and squeeze
+    times = np.load(phy_folder / "spike_times.npy")
+    np.save(phy_folder / "spike_times.npy", np.squeeze(times / 30000.).astype('float64'))
+    
+    # convert amplitudes and squeeze
+    amps = np.load(phy_folder / "amplitudes.npy")
+    np.save(phy_folder / "amplitudes.npy", np.squeeze(-amps / 1e6).astype('float64'))
+    
+    # save depths and channel inds
+    np.save(phy_folder / "spike_depths.npy", spike_depths)
+    np.save(phy_folder / "channel_inds.npy", np.arange(len(channel_inds), dtype='int'))
+    
+    # save templates
+    cluster_channels = []
+    cluster_peakToTrough = []
+    cluster_waveforms = []
+    num_chans = []
+
+    templates = we_recless.get_all_templates()
+    channel_locs = we_recless.get_channel_locations()
+
+    for unit_idx, unit_id in enumerate(we_recless.unit_ids):
+        waveform = templates[unit_idx,:,:]
+        peak_channel = np.argmax(np.max(waveform, 0) - np.min(waveform,0))
+        peak_waveform = waveform[:,peak_channel]
+        peakToTrough = (np.argmax(peak_waveform) - np.argmin(peak_waveform)) / 30000.
+        cluster_channels.append(int(channel_locs[peak_channel,1] / 10))
+        cluster_peakToTrough.append(peakToTrough)
+        cluster_waveforms.append(waveform)
+        
+    np.save(phy_folder / "cluster_peakToTrough.npy", np.array(cluster_peakToTrough))
+    np.save(phy_folder / "cluster_waveforms.npy", np.stack(cluster_waveforms))
+    np.save(phy_folder / "cluster_channels.npy", np.array(cluster_channels))
+    
+    # rename files
+    _FILE_RENAMES = [  # file_in, file_out
+            ('channel_positions.npy', 'channels.localCoordinates.npy'),
+            ('channel_inds.npy', 'channels.rawInd.npy'),
+            ('cluster_peakToTrough.npy', 'clusters.peakToTrough.npy'),
+            ('cluster_channels.npy', 'clusters.channels.npy'),
+            ('cluster_waveforms.npy', 'clusters.waveforms.npy'),
+            ('spike_clusters.npy', 'spikes.clusters.npy'),
+            ('amplitudes.npy', 'spikes.amps.npy'),
+            ('spike_depths.npy', 'spikes.depths.npy'),
+            ('spike_times.npy', 'spikes.times.npy'),
+        ]
+    
+    input_directory = phy_folder
+    output_directory = Path('/results') / probe_name
+
+    if not os.path.exists(output_directory):
+        os.mkdir(output_directory)
+
+    for names in _FILE_RENAMES:
+        old_name = input_directory / names[0]
+        new_name = output_directory / names[1]
+        shutil.copyfile(old_name, new_name)
+
+    # save quality metrics
+    qm = we_recless.load_extension("quality_metrics")
+    
+    qm_data = qm.get_data()
+    
+    qm_data.index.name = 'cluster_id'
+    qm_data['cluster_id.1'] = qm_data.index.values
+    
+    qm_data.to_csv(output_folder / 'clusters.metrics.csv')
