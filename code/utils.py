@@ -1,5 +1,8 @@
 """
 Low-level functions to work in frequency domain for n-dim arrays
+
+Copied from https://github.com/int-brain-lab/ibl-neuropixel/ on 2/1/2024
+
 """
 from math import pi
 
