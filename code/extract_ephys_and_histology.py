@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from pathlib import Path
 import os
+import shutil
 
 
 import ants
@@ -64,22 +65,18 @@ def probe_df_to_fcsv(probe_data,extrema,results_folder,offset=(0,0,0)):
 if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('-sorted',
-                        dest = 'sorting_folder',
-                        default = 'ecephys_713506_2024-02-13_13-21-59_sorted_2024-02-14_08-03-38',
-                        help = 'Sorted Folder to use as baseline')
+
+    parser.add_argument('--manifest',
+                    dest = 'annoation_manifest',
+                    default = '713506_test.csv',
+                    help = 'Probe Annotations')
     
-    parser.add_argument('-probes',
+    parser.add_argument('--probes',
                         dest = 'annotation_file',
                         default = '713506_annotations',
                         help = 'Directory containing probe annotations')
                         
-    parser.add_argument('-manifest',
-                        dest = 'annoation_manifest',
-                        default = '713506_test.csv',
-                        help = 'Probe Annotations')
-                        
-    parser.add_argument('-registration',
+    parser.add_argument('--registration',
                     dest = 'registration_data',
                     default = '713506_to_ccf_Ex_639_Em_667_all_channel',
                     help = 'Directory containing output of registration')
@@ -87,11 +84,7 @@ if __name__=='__main__':
     args = parser.parse_args()
                         
     # If no values are passed, use default settings.
-        
-    if ('/data/' in args.sorting_folder):
-        sorting_folder = args.sorting_folder.split('/data/')[-1]
-    else:
-        sorting_folder = args.sorting_folder
+    
             
     if not ('/data/' in args.annotation_file):
         annotation_file_path = os.path.join('/data/',args.annotation_file)
@@ -135,7 +128,39 @@ if __name__=='__main__':
         image_in_template = ants.image_read(os.path.join(registration_data_asset,'registration',fl))
         outimg = ants.apply_transforms(ccf_25,image_in_template,['/data/spim_template_to_ccf/syn_1Warp.nii.gz','/data/spim_template_to_ccf/syn_0GenericAffine.mat'])
         ants.image_write(outimg,os.path.join(histology_results,f'histology_{chname}.nrrd'))
-        
+    
+
+    # Also get the image-space warping of the CCF.
+    image_histology_results = os.path.join('/results',str(df.mouseid[0]),'image_space_histology')
+    os.makedirs(image_histology_results,exist_ok = True)
+
+    ccf_in_image_space = ants.apply_transforms(zarr_read,
+                                            ccf_25,
+                                            [os.path.join(registration_data_asset,'registration','ls_to_template_SyN_0GenericAffine.mat'),
+                                                os.path.join(registration_data_asset,'registration','ls_to_template_SyN_1InverseWarp.nii.gz'),
+                                                '/data/spim_template_to_ccf/syn_0GenericAffine.mat',
+                                                '/data/spim_template_to_ccf/syn_1InverseWarp.nii.gz',],
+                                            whichtoinvert=[True,False,True,False],)
+    ants.image_write(ccf_in_image_space,os.path.join(image_histology_results,f'ccf_in_{df.mouseid[0]}.nrrd'))
+
+    ccf_labels_in_image_space = ants.apply_transforms(zarr_read,
+                                            ccf_annotation_25,
+                                            [os.path.join(registration_data_asset,'registration','ls_to_template_SyN_0GenericAffine.mat'),
+                                                os.path.join(registration_data_asset,'registration','ls_to_template_SyN_1InverseWarp.nii.gz'),
+                                                '/data/spim_template_to_ccf/syn_0GenericAffine.mat',
+                                                '/data/spim_template_to_ccf/syn_1InverseWarp.nii.gz',],
+                                            whichtoinvert=[True,False,True,False],
+                                            interpolator='genericLabel')
+    ants.image_write(ccf_labels_in_image_space,os.path.join(image_histology_results,f'labels_in_{df.mouseid[0]}.nrrd'))
+
+    # and copy the image space data into this folder
+    shutil.copy(os.path.join(registration_data_asset,'registration','prep_n4bias.nii.gz'),
+                os.path.join(image_histology_results,'histology_registration.nii.gz'))
+    for fl in other_files:
+        chname = fl.split('moved_ls_to_template_')[-1].split('.nii.gz')[0]
+        shutil.copy(os.path.join(registration_data_asset,'registration',fl),os.path.join(image_histology_results,'histology_{chname}.nii.gz'))
+
+
     # Prep file save local
     track_results = Path('/results/')/str(df.mouseid[0])/'track_data'
     os.makedirs(track_results,exist_ok= True)

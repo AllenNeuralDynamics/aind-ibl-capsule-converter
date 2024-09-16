@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
 
-pip install git+https://github.com/AllenNeuralDynamics/aind-mri-utils.git
+# pip install git+https://github.com/AllenNeuralDynamics/aind-mri-utils.git
 pip install --ignore-requires-python git+https://github.com/AllenNeuralDynamics/aind-morphology-utils.git

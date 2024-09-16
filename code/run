@@ -3,9 +3,10 @@ set -ex
 
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
 
-python -u extract_continuous.py "$@"
+#python -u extract_continuous.py "$@"
 
-python -u extract_spikes.py "$@"
+#python -u extract_spikes.py "$@"
 
+python ./extract_ephys_and_histology.py "$@"
 
-
+#-sorted ecephys_713506_2024-02-13_13-21-59_sorted_2024-02-14_08-03-38 -probes 713506_annotations -manifest 713506_test.csv -registration 713506_to_ccf_Ex_639_Em_667_all_channel

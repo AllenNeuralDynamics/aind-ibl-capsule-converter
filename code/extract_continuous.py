@@ -18,7 +18,7 @@ import argparse
 
 def extract_continuous(sorting_folder,results_folder,
                        RMS_WIN_LENGTH_SECS = 3,
-                       WELCH_WIN_LENGTH_SAMPLES=1025,
+                       WELCH_WIN_LENGTH_SAMPLES=2048,
                        TOTAL_SECS = 100):
     session_folder = Path(str(sorting_folder).split('_sorted')[0])
 

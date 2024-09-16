@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aind_mri_utils"
+description = "MRI utilities library for aind teams."
+license = { text = "MIT" }
+requires-python = ">=3.7"
+authors = [
+    { name = "Allen Institute for Neural Dynamics" },
+    { name = "Galen Lynch", email = "galen@galenlynch.com" },
+    { name = "Yoni Browning", email = "yoni.browning@alleninstitute.org" },
+]
+classifiers = ["Programming Language :: Python :: 3"]
+readme = "README.md"
+dynamic = ["version"]
+
+dependencies = [
+    'matplotlib >= 3, < 4',
+    'numpy >= 1.7, < 3',
+    'pywavefront >= 1.3, < 2',
+    'scipy >= 1, < 2',
+    'SimpleITK >= 2, < 3',
+    'vtk >= 9, < 10',
+    'openpyxl >= 3, < 4',
+    'trimesh >= 4, < 5',
+]
+
+[project.optional-dependencies]
+dev = ['black', 'coverage', 'flake8', 'interrogate', 'isort', 'Sphinx', 'furo']
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "aind_mri_utils.__version__" }
+
+[tool.black]
+line-length = 79
+target_version = ['py36']
+exclude = '''
+
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | build
+    | dist
+  )/
+  | .gitignore
+)
+'''
+
+[tool.coverage.run]
+omit = ["*__init__*"]
+source = ["src"]
+
+[tool.coverage.report]
+exclude_lines = ["if __name__ == .__main__.:", "# pragma: no cover"]
+fail_under = 30
+
+[tool.isort]
+line_length = 79
+profile = "black"
+
+[tool.interrogate]
+exclude = ["setup.py", "docs", "build", "tests"]
+fail-under = 70
