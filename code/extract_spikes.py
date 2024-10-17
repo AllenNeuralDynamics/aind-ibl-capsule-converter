@@ -16,8 +16,15 @@ def extract_spikes(sorting_folder,results_folder):
     session_folder = Path(str(sorting_folder).split('_sorted')[0])
     scratch_folder = Path('/scratch')
 
+    # At some point the directory structure changed- handle different cases.
     ecephys_folder = session_folder / "ecephys_clipped"
-    ecephys_compressed_folder = session_folder / 'ecephys_compressed'
+    if os.path.isdir(ecephys_folder):
+        ecephys_compressed_folder = session_folder / 'ecephys_compressed'
+    else:
+        ecephys_folder = session_folder/'ecephys'/'ecephys_clipped'
+        ecephys_compressed_folder = session_folder /'ecephys'/ 'ecephys_compressed'
+    print(f'ecephys folder: {ecephys_folder}')
+    print(f'ecephys compressed folder: {ecephys_compressed_folder}')
 
     sorting_curated_folder = sorting_folder / "sorting_precurated"
     postprocessed_folder = sorting_folder / 'postprocessed'
@@ -96,7 +103,7 @@ def extract_spikes(sorting_folder,results_folder):
             peak_channel = np.argmax(np.max(waveform, 0) - np.min(waveform,0))
             peak_waveform = waveform[:,peak_channel]
             peakToTrough = (np.argmax(peak_waveform) - np.argmin(peak_waveform)) / 30000.
-            cluster_channels.append(int(channel_locs[peak_channel,1] / 10))
+            cluster_channels.append(peak_channel)#int(channel_locs[peak_channel,1] / 10))
             cluster_peakToTrough.append(peakToTrough)
             cluster_waveforms.append(waveform)
 

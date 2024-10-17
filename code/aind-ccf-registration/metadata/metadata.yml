@@ -1,0 +1,16 @@
+metadata_version: 1
+name: aind-smartspim-ccf-registration
+description: A tool for automated registration of lightsheet image volumes to the
+  Allen V3 CCF template
+tags:
+- SmartSPIM
+authors:
+- name: Camilo Laiton
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Di Wang
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Sharmishtaa Seshamani
+  affiliations:
+  - name: Allen Institute for Neural Dynamics

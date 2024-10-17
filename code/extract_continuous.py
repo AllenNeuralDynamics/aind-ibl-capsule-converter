@@ -25,8 +25,15 @@ def extract_continuous(sorting_folder,results_folder,
 
     scratch_folder = Path('/scratch')
 
+    # At some point the directory structure changed- handle different cases.
     ecephys_folder = session_folder / "ecephys_clipped"
-    ecephys_compressed_folder = session_folder / 'ecephys_compressed'
+    if os.path.isdir(ecephys_folder):
+        ecephys_compressed_folder = session_folder / 'ecephys_compressed'
+    else:
+        ecephys_folder = session_folder/'ecephys'/'ecephys_clipped'
+        ecephys_compressed_folder = session_folder /'ecephys'/ 'ecephys_compressed'
+    print(f'ecephys folder: {ecephys_folder}')
+    print(f'ecephys compressed folder: {ecephys_compressed_folder}')
 
     sorting_curated_folder = sorting_folder / "sorting_precurated"
     postprocessed_folder = sorting_folder / 'postprocessed'
