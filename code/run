@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -ex
 
+# Save a directory tree for the /data folder (helps debug issues attaching data assets)
+tree -L 2 --dirsfirst /data > /results/attached_data.txt
+
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
 
 python ./extract_ephys_and_histology.py "$@"
