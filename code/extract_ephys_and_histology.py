@@ -1,5 +1,5 @@
 from aind_mri_utils.file_io.neuroglancer import read_neuroglancer_annotation_layers
-from aind_mri_utils.file_io.neuroglancer import get_image_source
+from aind_mri_utils.file_io.neuroglancer import get_image_source, _load_json_file
 import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -30,6 +30,33 @@ from aind_ephys_ibl_gui_conversion.histology import check_orientation
 from aind_ephys_ibl_gui_conversion.histology import get_highest_level_info
 from aind_ephys_ibl_gui_conversion.histology import get_additional_channel_image_at_highest_level
 
+
+# Updated version of https://github.com/AllenNeuralDynamics/aind-mri-utils/blob/3e757c6a58676dac345b936f4215322e0a923494/src/aind_mri_utils/file_io/neuroglancer.py#L296
+def get_image_source(filename: str) -> list[str]:
+    """
+    Reads image source url from a Neuroglancer JSON file.
+    
+    Returns a list of image sources.    
+    """
+    data = _load_json_file(filename)
+
+    image_layers = [x for x in data['layers'] if x['type'] == 'image']
+    return [layer['source'] if isinstance(layer['source'], str) else layer['source']['url'] for layer in image_layers] 
+
+# Reimplemented until this is fixed https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion/blob/8d0a36cd1ddece4176e7205a978de4824548c4ce/src/aind_ephys_ibl_gui_conversion/histology.py#L82
+
+from aind_mri_utils.measurement import find_line_eig
+
+def order_annotation_pts(points,axis = 2,order = 'desending'):
+    from aind_mri_utils.measurement import find_line_eig
+    N,pt = find_line_eig(points)
+    proj = projected_onto_line(points,N,pt)
+    this_order = np.argsort(proj[:,2])
+    if order == 'desending':
+        this_order = this_order[::-1]
+    return points[this_order,:]
+
+
 if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
@@ -50,7 +77,6 @@ if __name__=='__main__':
                         help = 'Use old registration from Di capsual')
                         
     args = parser.parse_args()
-
     if args.legacy_registration == '':
         args.legacy_registration = None
                         
@@ -66,7 +92,8 @@ if __name__=='__main__':
     else:
         annotation_manifest_path = args.annotation_manifest
     
-
+    # for debugging, keep a record of the manifest used
+    Path('/results/manifest.csv').write_bytes(Path(annotation_manifest_path).read_bytes())
 
     # Read the annotation-ephys pairings
     manifest_df = pd.read_csv(annotation_manifest_path)
@@ -83,8 +110,13 @@ if __name__=='__main__':
     if args.legacy_registration == None:
         # Image source will be in a neuroglancer layer.
         # This assumes that a matching stiched asset is attached to the file.
-        source = get_image_source('/data/Probes_561_729293_Day1and2.json')
-        registration_data_asset = os.path.join('/data/',[x for x in source[0].split('/') if 'SmartSPIM' in x][0])
+        sources = get_image_source(neuroglancer_file_path)
+        if len(sources) > 1:
+            print("Found multiple SmartSPIM sources in Neuroglancer file. Using source for first layer.")
+        source = sources[0]
+        print(f"Using SmartSPIM source: {source}")
+        smartspim_session_id = next(x for x in source.split('/') if x.startswith('SmartSPIM_'))
+        registration_data_asset = os.path.join('/data/', smartspim_session_id)
         
         # Find data
         alignment_channel = np.sort(os.listdir(os.path.join(registration_data_asset,'image_atlas_alignment')))[-1]
@@ -202,13 +234,13 @@ if __name__=='__main__':
         recording_folder = Path('/data/')/row.sorted_recording
         results_folder = Path('/results/')/str(row.mouseid)/recording_id
 
-        if not os.path.exists(Path(annotation_file_path)/f'{row.probe_file}.{extension}'):
-            missing = Path(annotation_file_path)/f'{row.probe_file}.{extension}'
-            print(f'Failed to find {missing}')
+        pattern = f'*/{row.probe_file}.{extension}'
+        annotation_file_path = next(Path('/data').glob(pattern), None)
+        if annotation_file_path is None:
+            print(f'Failed to find {pattern!r}')
             continue
         else:
-            probe_data = read_neuroglancer_annotation_layers(Path(annotation_file_path)/f'{row.probe_file}.{extension}',
-                                                            layer_names = [row.probe_id])
+            probe_data = read_neuroglancer_annotation_layers(annotation_file_path, layer_names = [row.probe_id])
             this_probe_data = pd.DataFrame({'x':probe_data[row.probe_id][:,0],
                                            'y':probe_data[row.probe_id][:,1],
                                            'z':probe_data[row.probe_id][:,2]})
