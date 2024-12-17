@@ -1,7 +1,6 @@
 import numpy as np
 from pathlib import Path
 import shutil
-import os
 import glob
 
 import spikeinterface as si
@@ -18,7 +17,7 @@ def extract_spikes(sorting_folder,results_folder):
 
     # At some point the directory structure changed- handle different cases.
     ecephys_folder = session_folder / "ecephys_clipped"
-    if os.path.isdir(ecephys_folder):
+    if ecephys_folder.is_dir():
         ecephys_compressed_folder = session_folder / 'ecephys_compressed'
     else:
         ecephys_folder = session_folder/'ecephys'/'ecephys_clipped'
@@ -50,25 +49,29 @@ def extract_spikes(sorting_folder,results_folder):
 
         output_folder = Path(results_folder) / probe_name
 
-        if not os.path.exists(output_folder):
-            os.mkdir(output_folder)
+        if not output_folder.is_dir():
+            output_folder.mkdir()
 
-        print('Loading waveforms...')
-        we_recless = si.load_waveforms(postprocessed_folder / f'experiment1_{stream_name}_recording1', 
-                                   with_recording=False)
-
-        channel_inds = np.array([int(name[2:])-1 for name in we_recless.channel_ids])
+        print('Loading sorting analyzer...')
+        analyzer_folder = postprocessed_folder / f'experiment1_{stream_name}_recording1.zarr'
+        if analyzer_folder.is_dir():
+            analyzer = si.load_sorting_analyzer(analyzer_folder)
+        else:
+            analyzer = si.load_sorting_analyzer_or_waveforms(
+                postprocessed_folder / f'experiment1_{stream_name}_recording1'
+            )
 
         phy_folder = scratch_folder / f"{postprocessed_folder.parent.name}_phy"
 
         print('Exporting to phy format...')
-        export_to_phy(we_recless, 
-                       output_folder=phy_folder,
-                       compute_pc_features=False,
-                       remove_if_exists=True,
-                       copy_binary=False)
+        export_to_phy(analyzer, 
+                      output_folder=phy_folder,
+                      compute_pc_features=False,
+                      remove_if_exists=True,
+                      copy_binary=False,
+                      dtype = 'int16')
 
-        spike_locations = we_recless.load_extension("spike_locations").get_data()
+        spike_locations = analyzer.get_extension("spike_locations").get_data()
         spike_depths = spike_locations["y"]
 
         print('Converting data...')
@@ -87,7 +90,7 @@ def extract_spikes(sorting_folder,results_folder):
 
         # save depths and channel inds
         np.save(phy_folder / "spike_depths.npy", spike_depths)
-        np.save(phy_folder / "channel_inds.npy", np.arange(len(channel_inds), dtype='int'))
+        np.save(phy_folder / "channel_inds.npy", np.arange(analyzer.get_num_channels()), dtype='int')
 
         # save templates
         cluster_channels = []
@@ -95,10 +98,11 @@ def extract_spikes(sorting_folder,results_folder):
         cluster_waveforms = []
         num_chans = []
 
-        templates = we_recless.get_all_templates()
-        channel_locs = we_recless.get_channel_locations()
+        template_ext = analyzer.get_extension("templates")
+        templates = template_ext.get_templates()
+        channel_locs = analyzer.get_channel_locations()
 
-        for unit_idx, unit_id in enumerate(we_recless.unit_ids):
+        for unit_idx, unit_id in enumerate(analyzer.unit_ids):
             waveform = templates[unit_idx,:,:]
             peak_channel = np.argmax(np.max(waveform, 0) - np.min(waveform,0))
             peak_waveform = waveform[:,peak_channel]
@@ -132,7 +136,7 @@ def extract_spikes(sorting_folder,results_folder):
             shutil.copyfile(old_name, new_name)
 
         # save quality metrics
-        qm = we_recless.load_extension("quality_metrics")
+        qm = analyzer.get_extension("quality_metrics")
 
         qm_data = qm.get_data()
 
@@ -156,9 +160,9 @@ if __name__=='__main__':
         sorting_folder = Path(glob.glob('/data/ecephys_*sorted*')[0])
         results_folder = Path('/results/')
     else:
-        sorting_folder = Path(os.path.join('/data/',args.sorting_folder))
+        sorting_folder = Path('/data/') / args.sorting_folder
         session_name = Path(str(sorting_folder).split('_sorted')[0]).name
         results_folder = Path('/results/')/session_name
-        os.makedirs(results_folder,exist_ok=True)
+        results_folder.mkdir(exist_ok=True)
 
     extract_spikes(sorting_folder,results_folder)

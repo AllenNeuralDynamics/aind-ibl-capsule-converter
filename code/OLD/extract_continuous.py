@@ -1,5 +1,4 @@
 import glob
-import os
 
 import numpy as np
 from scipy import signal
@@ -27,10 +26,10 @@ def extract_continuous(sorting_folder,results_folder,
 
     # At some point the directory structure changed- handle different cases.
     ecephys_folder = session_folder / "ecephys_clipped"
-    if os.path.isdir(ecephys_folder):
+    if ecephys_folder.is_dir():
         ecephys_compressed_folder = session_folder / 'ecephys_compressed'
     else:
-        ecephys_folder = session_folder/'ecephys'/'ecephys_clipped'
+        ecephys_folder = session_folder / 'ecephys' / 'ecephys_clipped'
         ecephys_compressed_folder = session_folder /'ecephys'/ 'ecephys_compressed'
     print(f'ecephys folder: {ecephys_folder}')
     print(f'ecephys compressed folder: {ecephys_compressed_folder}')
@@ -39,7 +38,7 @@ def extract_continuous(sorting_folder,results_folder,
     postprocessed_folder = sorting_folder / 'postprocessed'
 
     # extract stream names
-    stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
+    stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_folder)
 
     neuropix_streams = [s for s in stream_names if 'Neuropix' in s]
     probe_names = [s.split('.')[1].split('-')[0] for s in neuropix_streams]
@@ -52,8 +51,8 @@ def extract_continuous(sorting_folder,results_folder,
 
         output_folder = Path(results_folder) / probe_name
 
-        if not os.path.exists(output_folder):
-            os.mkdir(output_folder)
+        if not output_folder.is_dir():
+            output_folder.mkdir(output_folder)
 
         if '-LFP' in stream_name:
             is_lfp = True
@@ -66,16 +65,18 @@ def extract_continuous(sorting_folder,results_folder,
             is_lfp = True
             ap_stream_name = stream_name
 
-        waveform_folder = postprocessed_folder / f'experiment1_{ap_stream_name}_recording1'
+        analyzer_folder = postprocessed_folder / f'experiment1_{ap_stream_name}_recording1.zarr'
 
-        print(waveform_folder)
-
-        we_recless = si.load_waveforms(waveform_folder, 
-                                       with_recording=False)
-
-        channel_inds = np.array([int(name[2:])-1 for name in we_recless.channel_ids])
-
+        if analyzer_folder.is_dir():
+            analyzer = si.load_sorting_analyzer(analyzer_folder)
+        else:
+            analyzer = si.load_sorting_analyzer_or_waveforms(
+                postprocessed_folder / f'experiment1_{ap_stream_name}_recording1'
+            )
         recording = si.read_zarr(ecephys_compressed_folder / f"experiment1_{stream_name}.zarr")
+
+        good_channel_mask = np.isin(recording.channel_ids, analyzer.channel_ids)
+        channel_inds = np.arange(recording.get_num_channels())[good_channel_mask]
 
         print(f'Stream sample rate: {recording.sampling_frequency}')
 
@@ -150,9 +151,9 @@ if __name__=='__main__':
         sorting_folder = Path(glob.glob('/data/ecephys_*sorted*')[0])
         results_folder = Path('/results/')
     else:
-        sorting_folder = Path(os.path.join('/data/',args.sorting_folder))
+        sorting_folder = Path('/data/') / args.sorting_folder)
         session_name = Path(str(sorting_folder).split('_sorted')[0]).name
         results_folder = Path('/results/')/session_name
-        os.makedirs(results_folder,exist_ok=True)
+        results_folder.mkdir(exist_ok=True)
 
     extract_continuous(sorting_folder,results_folder)

@@ -1,4 +1,5 @@
 from aind_mri_utils.file_io.neuroglancer import read_neuroglancer_annotation_layers
+from aind_mri_utils.file_io.neuroglancer import get_image_source
 import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -10,270 +11,65 @@ import zarr
 
 
 import ants
-import iblatlas.atlas as atlas
 import json
-
-from aind_morphology_utils.utils import read_swc
-
-from extract_spikes import extract_spikes
-from extract_continuous import extract_continuous
+from iblatlas import atlas
 
 import argparse
 
-def import_swc_probe_data(filename):
-    S = read_swc(filename)
-    return pd.DataFrame(S.compartment_list)
-
-def create_slicer_fcsv(filename,pts_mat,direction = 'LPS',pt_orientation = [0,0,0,1],pt_visibility = 1,pt_selected = 0, pt_locked = 1):
-    """
-    Save fCSV file that is slicer readable.
-    """
-    # Create output file
-    OutObj = open(filename,"w+")
-    
-    header0 = '# Markups fiducial file version = 4.11\n'
-    header1 = '# CoordinateSystem = '+ direction+'\n'
-    header2 = '# columns = id,x,y,z,ow,ox,oy,oz,vis,sel,lock,label,desc,associatedNodeID\n'
-    
-    OutObj.writelines([header0,header1,header2])
-    
-    outlines = []
-    for ii in range(pts_mat.shape[0]):
-        outlines.append(
-            str(ii+1) +','+ 
-            str(pts_mat[ii,0])+','+ 
-            str(pts_mat[ii,1])+','+ 
-            str(pts_mat[ii,2])+
-            f',{pt_orientation[0]},{pt_orientation[1]},{pt_orientation[2]},{pt_orientation[3]},'+
-            f'{pt_visibility},{pt_selected},{pt_locked},'+ 
-            str(ii)+',,vtkMRMLScalarVolumeNode1\n')
-    
-    OutObj.writelines(outlines)
-    OutObj.close()
-    
-def probe_df_to_fcsv(probe_data,extrema,results_folder,offset=(0,0,0)):
-    unq = np.unique(probe_data.tree_id)
-    probes = {}
-    for ii,uu in enumerate(unq):
-        this_probe_data = probe_data[probe_data.tree_id==uu]
-        x = extrema[0]-(this_probe_data.x/1000).values+offset[0]
-        y = (this_probe_data.y/1000).values+offset[1]
-        z = -(this_probe_data.z/1000).values+offset[2]    
-        probes[str(uu)] = np.vstack([x,y,z]).T
-        create_slicer_fcsv(os.path.join(results_folder,f'test{uu}.fcsv'),probes[str(uu)],direction = 'LPS')
-        
-    return probes
-
-from aind_mri_utils.measurement import find_line_eig
-def projected_onto_line(points,line_N,line_P):
-    line_N = line_N/np.linalg.norm(line_N)
-    projL = (points-line_P)@line_N
-    return line_P+np.outer(projL,line_N)
-
-def order_annotation_pts(points,axis = 2,order = 'desending'):
-    N,pt = find_line_eig(this_probe)
-    proj = projected_onto_line(this_probe,N,pt)
-    this_order = np.argsort(proj[:,2])
-    if order == 'desending':
-        this_order = this_order[::-1]
-    return this_probe[this_order,:]
-
-
-def read_json_as_dict(filepath: str):
-    """
-    Reads a json as dictionary.
-
-    Parameters
-    ------------------------
-
-    filepath: PathLike
-        Path where the json is located.
-
-    Returns
-    ------------------------
-
-    dict:
-        Dictionary with the data the json has.
-
-    """
-
-    dictionary = {}
-
-    if os.path.exists(filepath):
-        with open(filepath) as json_file:
-            dictionary = json.load(json_file)
-
-    return dictionary
-
-
-
-def __read_zarr_image(image_path):
-    """
-    Reads a zarr image
-
-    Parameters
-    -------------
-    image_path: PathLike
-        Path where the zarr image is located
-
-    Returns
-    -------------
-    np.array
-        Numpy array with the zarr image
-    """
-    image_path = str(image_path)
-    zarr_img = zarr.open(image_path, mode="r")
-    img_array = np.asarray(zarr_img)
-    img_array = np.squeeze(img_array)
-    return img_array
-
-def check_orientation(img: np.array, params: dict, orientations: dict):
-    """
-    Checks aquisition orientation an makes sure it is aligned to the CCF. The
-    CCF orientation is:
-        - superior_to_inferior
-        - left_to_right
-        - anterior_to_posterior
-
-    Parameters
-    ----------
-    img : np.array
-        The raw image in its aquired orientatin
-    params : dict
-        The orientation information from processing_manifest.json
-    orientations: dict
-        The axis order of the CCF reference atals
-
-    Returns
-    -------
-    img_out : np.array
-        The raw image oriented to the CCF
-    """
-
-    orient_mat = np.zeros((3, 3))
-    acronym = ["", "", ""]
-
-    for k, vals in enumerate(params):
-        direction = vals["direction"].lower()
-        dim = vals["dimension"]
-        if direction in orientations.keys():
-            ref_axis = orientations[direction]
-            orient_mat[dim, ref_axis] = 1
-            acronym[dim] = direction[0]
-        else:
-            direction_flip = "_".join(direction.split("_")[::-1])
-            ref_axis = orientations[direction_flip]
-            orient_mat[dim, ref_axis] = -1
-            acronym[dim] = direction[0]
-
-    # check because there was a bug that allowed for invalid spl orientation
-    # all vals should be postitive so just taking absolute value of matrix
-    if "".join(acronym) == "spl":
-        orient_mat = abs(orient_mat)
-
-    original, swapped = np.where(orient_mat)
-    img_out = np.moveaxis(img, original, swapped)
-
-    out_mat = orient_mat[:, swapped]
-    for c, row in enumerate(orient_mat.T):
-        val = np.where(row)[0][0]
-        if row[val] == -1:
-            img_out = np.flip(img_out, c)
-            out_mat[val, val] *= -1
-
-    return img_out, orient_mat, out_mat
-
-
-def get_highest_level_info(filepath,return_order = 'xyz'):
-
-
-    with open(os.path.join(filepath,'.zattrs')) as f:
-        metadata = json.load(f)
-
-    zarr_axis_order = [field['name'] for field in metadata['multiscales'][0]['axes']]
-    highest_level = metadata['multiscales'][0]['datasets'][-1]
-    scale = highest_level['coordinateTransformations'][0]['scale']
-    level_path = highest_level['path']
-
-    # Put in xyz order
-    sort_scale = []
-    for ii in list(return_order):
-        sort_scale.append(scale[zarr_axis_order.index(ii)])
-
-    return level_path,np.array(sort_scale)
-
-
-def get_additional_channel_image_at_highest_level(image_path,
-                                ants_template,
-                                input_orientations,
-                                template_orientations = {
-                                    "anterior_to_posterior": 1,
-                                    "superior_to_inferior": 2,
-                                    "right_to_left": 0,
-                                },scale_factor = 1e-3):
-    highest_level,scale = get_highest_level_info(image_path)
-    img_array = __read_zarr_image(os.path.join(image_path,highest_level))
-    img_array = img_array.astype(np.double)
-    img_out, in_mat, out_mat = check_orientation(
-        img_array,
-        input_orientations,
-        template_orientations,
-        )
-
-    ants_img = ants.from_numpy(img_out, spacing=list(scale*scale_factor))
-    ants_img.set_direction(ants_template.direction)
-    ants_img.set_origin(ants_template.origin)
-    return ants_img
-
+# Ephy readers
+from aind_ephys_ibl_gui_conversion.ephys import extract_continuous
+from aind_ephys_ibl_gui_conversion.ephys import extract_spikes
+# Etc.
+from aind_ephys_ibl_gui_conversion.histology import create_slicer_fcsv
+from aind_ephys_ibl_gui_conversion.histology import probe_df_to_fcsv
+from aind_ephys_ibl_gui_conversion.histology import projected_onto_line
+from aind_ephys_ibl_gui_conversion.histology import order_annotation_pts
+from aind_ephys_ibl_gui_conversion.histology import read_json_as_dict
+from aind_ephys_ibl_gui_conversion.histology import __read_zarr_image
+from aind_ephys_ibl_gui_conversion.histology import check_orientation
+from aind_ephys_ibl_gui_conversion.histology import get_highest_level_info
+from aind_ephys_ibl_gui_conversion.histology import get_additional_channel_image_at_highest_level
 
 if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--manifest',
-                    dest = 'annoation_manifest',
+                    dest = 'annotation_manifest',
                     default = '729293/Manifest_Day1_2_729293 1.csv',
                     help = 'Probe Annotations')
     
-    parser.add_argument('--probes',
-                        dest = 'annotation_path',
-                        default = '729293',
+    parser.add_argument('--neuroglancer',
+                        dest = 'neuroglancer',
+                        default = 'Probes_561_729293_Day1and2.json',
                         help = 'Directory containing probe annotations')
                         
-    parser.add_argument('--registration',
-                    dest = 'registration_data',
-                    default = 'SmartSPIM_722683_2024-08-20_23-10-19_stitched_2024-08-22_05-26-47',
-                    help = 'Directory containing output of registration')
-    
-    parser.add_argument('--legacy',
-                        dest = 'legacy_flag',
-                        default =False,
+    parser.add_argument('--legacy_registration',
+                        dest = 'legacy_registration',
+                        default =None,
                         help = 'Use old registration from Di capsual')
                         
     args = parser.parse_args()
+
+    if args.legacy_registration == '':
+        args.legacy_registration = None
                         
-    # If no values are passed, use default settings.
-    
-            
-    if not ('/data/' in args.annotation_path):
-        annotation_file_path = os.path.join('/data/',args.annotation_path)
+
+    # Find the neuroglancer file
+    if not ('/data/' in args.neuroglancer):
+        neuroglancer_file_path = os.path.join('/data/',args.neuroglancer)
     else:
-        annotation_file_path = args.annotation_path
+        neuroglancer_file_path = args.neuroglancer
                         
-    if not ('/data/' in args.annoation_manifest):
-        annoation_manifest_path = os.path.join('/data/',args.annoation_manifest)
+    if not ('/data/' in args.annotation_manifest):
+        annotation_manifest_path = os.path.join('/data/',args.annotation_manifest)
     else:
-        annoation_manifest_path = args.annoation_manifest
-        
-    if not ('/data/' in args.registration_data):
-        registration_data_asset = os.path.join('/data/',args.registration_data)
-    else:
-        registration_data_asset = args.registration_data
+        annotation_manifest_path = args.annotation_manifest
     
-    legacy_flag = bool(args.legacy_flag.lower()=='true')
-    
+
+
     # Read the annotation-ephys pairings
-    manifest_df = pd.read_csv(annoation_manifest_path)
+    manifest_df = pd.read_csv(annotation_manifest_path)
 
     # Load the template and the ccf
     template = ants.image_read('/data/smartspim_lca_template/smartspim_lca_template_25.nii.gz')
@@ -281,13 +77,27 @@ if __name__=='__main__':
     ccf_annotation_25 = ants.image_read('/data/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz')
     brain_atlas = atlas.AllenAtlas(25,hist_path='/scratch/')
     
-    # Get volume information to interpret probe tracks
-    if ~legacy_flag:
+    # Default is to use the pipeline registration. 
+    # However, if an alternative path is passed as "legacy_registration", we will pull the regisration from there.
+    # This assumes that you used Di's conversion capsual. If you don't know what that means, you probably didnt...
+    if args.legacy_registration == None:
+        # Image source will be in a neuroglancer layer.
+        # This assumes that a matching stiched asset is attached to the file.
+        source = get_image_source('/data/Probes_561_729293_Day1and2.json')
+        registration_data_asset = os.path.join('/data/',[x for x in source[0].split('/') if 'SmartSPIM' in x][0])
+        
+        # Find data
         alignment_channel = np.sort(os.listdir(os.path.join(registration_data_asset,'image_atlas_alignment')))[-1]
         prep_image_folder = os.path.join(registration_data_asset,'image_atlas_alignment',alignment_channel,'metadata','registration_metadata')
         moved_image_folder = os.path.join(registration_data_asset,'image_atlas_alignment',alignment_channel)
 
-    else:
+    else:        
+        # Handle legacy path
+        if not ('/data/' in args.legacy_registration):
+            registration_data_asset = os.path.join('/data/',args.legacy_registration)
+        else:
+            registration_data_asset = args.legacy_registration
+        
         prep_image_folder = os.path.join(registration_data_asset,'registration')
         moved_image_folder = os.path.join(registration_data_asset,'registration')
 
@@ -309,7 +119,8 @@ if __name__=='__main__':
     shutil.copy(os.path.join(prep_image_folder,'prep_n4bias.nii.gz'),
                 os.path.join(image_histology_results,'histology_registration.nii.gz'))
     
-    if legacy_flag:
+    if args.legacy_registration != None:
+        raise NotImplementedError('Legacy Flag has been removed. If this is a problem, it needs to be reimplemented')
         # Handle other channels: This is a work in progress
         other_files = [x for x in os.listdir(moved_image_folder) if 'moved_ls_to_template_' in x and '.nii.gz' in x]
         for fl in other_files:
@@ -381,12 +192,10 @@ if __name__=='__main__':
     processed_recordings = []
 
     for ii,row in manifest_df.iterrows():
-        if row.annotation_format.lower()=='swc':
-            extension = 'swc'
-        elif row.annotation_format.lower()=='json':
+        if row.annotation_format.lower()=='json':
             extension = 'json'
         else:
-            raise ValueError('Currently only swc annotations from horta OR jsons from neuroglancer are supported!')
+            raise ValueError('Currently only jsons from neuroglancer are supported!')
 
         # Find the sorted and origional data
         recording_id = row.sorted_recording.split('_sorted')[0]
@@ -398,28 +207,14 @@ if __name__=='__main__':
             print(f'Failed to find {missing}')
             continue
         else:
-            if extension == 'swc':
-                print(row.probe_file)
-                probe_data = import_swc_probe_data(Path(annotation_file_path)/f'{row.probe_file}.{extension}')
-                this_probe_data = probe_data[probe_data.tree_id==row.probe_id]
-
-                if np.any(probe_data.tree_id.values>0):
-                    probe_name = row.probe_file+'_'+row.probe_id
-                else:
-                    probe_name = row.probe_file
-
-                x = extrema[0]-(this_probe_data.x/1000).values+offset[0]
-                y = (this_probe_data.y/1000).values+offset[1]
-                z = -(this_probe_data.z/1000).values+offset[2]
-            else:
-                probe_data = read_neuroglancer_annotation_layers(Path(annotation_file_path)/f'{row.probe_file}.{extension}',
-                                                                layer_names = [row.probe_id])
-                this_probe_data = pd.DataFrame({'x':probe_data[row.probe_id][:,0],
-                                               'y':probe_data[row.probe_id][:,1],
-                                               'z':probe_data[row.probe_id][:,2]})
-                x = extrema[0]-this_probe_data.x.values*1e3+offset[0]
-                y  = this_probe_data.y.values*1e3+offset[1]
-                z = -this_probe_data.z.values*1e3+offset[2]
+            probe_data = read_neuroglancer_annotation_layers(Path(annotation_file_path)/f'{row.probe_file}.{extension}',
+                                                            layer_names = [row.probe_id])
+            this_probe_data = pd.DataFrame({'x':probe_data[row.probe_id][:,0],
+                                           'y':probe_data[row.probe_id][:,1],
+                                           'z':probe_data[row.probe_id][:,2]})
+            x = extrema[0]-this_probe_data.x.values*1e3+offset[0]
+            y  = this_probe_data.y.values*1e3+offset[1]
+            z = -this_probe_data.z.values*1e3+offset[2]
 
             this_probe = np.vstack([x,y,z]).T
             this_probe = order_annotation_pts(this_probe)
