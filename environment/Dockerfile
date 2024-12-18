@@ -1,4 +1,4 @@
-# hash:sha256:ba3d99c3989cbf24cfa85b6c51ea0ee01f406113396045bb3123ec1ccbc46d25
+# hash:sha256:2d5d8bdd5a9f01dbcb3592d14becbd35af09e3e3e43c4c5c8c43adb0f00f2014
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
@@ -10,7 +10,7 @@ COPY git-askpass /
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        tree \
+        tree=1.8.0-1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U --no-cache-dir \

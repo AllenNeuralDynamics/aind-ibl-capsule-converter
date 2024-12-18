@@ -43,20 +43,6 @@ def get_image_source(filename: str) -> list[str]:
     image_layers = [x for x in data['layers'] if x['type'] == 'image']
     return [layer['source'] if isinstance(layer['source'], str) else layer['source']['url'] for layer in image_layers] 
 
-# Reimplemented until this is fixed https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion/blob/8d0a36cd1ddece4176e7205a978de4824548c4ce/src/aind_ephys_ibl_gui_conversion/histology.py#L82
-
-from aind_mri_utils.measurement import find_line_eig
-
-def order_annotation_pts(points,axis = 2,order = 'desending'):
-    from aind_mri_utils.measurement import find_line_eig
-    N,pt = find_line_eig(points)
-    proj = projected_onto_line(points,N,pt)
-    this_order = np.argsort(proj[:,2])
-    if order == 'desending':
-        this_order = this_order[::-1]
-    return points[this_order,:]
-
-
 if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
