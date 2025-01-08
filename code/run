@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
 set -ex
 
+# --------------------------------------------------------------------------------
 # Save a directory tree for the /data folder (helps debug issues attaching data assets)
 tree -L 2 --dirsfirst /data > /results/attached_data.txt
+# --------------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------------
+# Install the latest version of package(s) from source:
+if [[ "$@" =~ "--update_packages_from_source=1" ]]; then
+echo "Updating package(s) from source"
+
+# update pip to ensure we can install a package from pyproject.toml 
+export PIP_ROOT_USER_ACTION=ignore
+python -m pip install -U pip -q
+
+export package=aind-ephys-ibl-gui-conversion
+
+git clone https://github.com/AllenNeuralDynamics/$package
+cd $package
+pip install -e . -q
+# display commit hash
+commit_hash=$(git rev-parse HEAD)
+echo Installed $package: $commit_hash
+cd ..
+fi
+# --------------------------------------------------------------------------------
 
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
 
