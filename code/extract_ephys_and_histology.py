@@ -142,7 +142,6 @@ if __name__=='__main__':
                 os.path.join(image_histology_results,'histology_registration.nii.gz'))
     
     if args.legacy_registration != None:
-        raise NotImplementedError('Legacy Flag has been removed. If this is a problem, it needs to be reimplemented')
         # Handle other channels: This is a work in progress
         other_files = [x for x in os.listdir(moved_image_folder) if 'moved_ls_to_template_' in x and '.nii.gz' in x]
         for fl in other_files:
