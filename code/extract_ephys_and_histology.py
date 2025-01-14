@@ -57,11 +57,15 @@ if __name__=='__main__':
                         default = 'Probes_561_729293_Day1and2.json',
                         help = 'Directory containing probe annotations')
                         
-    parser.add_argument('--legacy_registration',
+    parser.add_argument('--legacy',
                         dest = 'legacy_registration',
                         default =None,
                         help = 'Use old registration from Di capsual')
                         
+    parser.add_argument('--update_packages_from_source',
+                        default = None,
+                        help = 'Unused in capsule run script')
+
     args = parser.parse_args()
     if args.legacy_registration == '':
         args.legacy_registration = None
