@@ -261,14 +261,17 @@ if __name__=='__main__':
             ccf_mlapdv[:,1] = ccf_mlapdv[:,1]
             ccf_mlapdv[:,2] = -ccf_mlapdv[:,2]
             bregma_mlapdv = brain_atlas.ccf2xyz(ccf_mlapdv, ccf_order='mlapdv')*1000000
-            xyz_picks = {'xyz_picks':bregma_mlapdv.tolist()}
+            #xyz_picks = {'xyz_picks':bregma_mlapdv.tolist()}
 
             if row.sorted_recording not in processed_recordings: # DEBUGGING HACK TO STOP EPHYS PROCESSING! FIX BEFORE RELEASE
                 print(f'Have not yet processed: {row.sorted_recording}. Doing that now.') 
                 os.makedirs(results_folder,exist_ok = True)
                 try:
+                    if not pd.isna(row.surface_finding):
+                        extract_continuous(recording_folder,results_folder, Path(f'/data/{row.surface_finding}'))
+                    else:
+                        extract_continuous(recording_folder,results_folder)
                     extract_spikes(recording_folder,results_folder)
-                    extract_continuous(recording_folder,results_folder)
                 except ValueError:
                     warnings.warn(f'Missing spike sorting for {row.sorted_recording}. Proceeding with histology only')
                     # Coppy the spike sorting error message to help future debugging.
@@ -276,14 +279,48 @@ if __name__=='__main__':
                         os.path.join(results_folder,'output'))
                 processed_recordings.append(row.sorted_recording)
 
-            # Save this in two locations. First, save sorted by filename
-            with open(os.path.join(bregma_results,f'{row.probe_id}.json'), "w") as f:
-                # Serialize data to JSON format and write to file
-                json.dump(xyz_picks, f)
+            xyz_image_space = this_probe_data[['x', 'y', 'z']].to_numpy()
+            xyz_image_space[:, 0] = (extrema[0] - (xyz_image_space[:, 0] * 1000)) * 1000
+            xyz_image_space[:, 1] = xyz_image_space[:, 1] * 1000000
+            xyz_image_space[:, 2] = xyz_image_space[:, 2] * 1000000
+
+            xyz_picks_image_space = {'xyz_picks':xyz_image_space.tolist()}
+            xyz_picks_ccf = {'xyz_picks': bregma_mlapdv.tolist()}
+
+            if not pd.isna(row.probe_shank):
+                shank_id = row.probe_shank + 1
+                # Save this in two locations. First, save sorted by filename
+                with open(os.path.join(bregma_results,f'{row.probe_id}_shank{shank_id}_image_space.json'), "w") as f:
+                    # Serialize data to JSON format and write to file
+                    json.dump(xyz_picks_image_space, f)
+
+                with open(os.path.join(bregma_results,f'{row.probe_id}_shank{shank_id}_ccf.json'), "w") as f:
+                    # Serialize data to JSON format and write to file
+                    json.dump(xyz_picks_ccf, f)
+            else:
+                with open(os.path.join(bregma_results,f'{row.probe_id}_image_space.json'), "w") as f:
+                    # Serialize data to JSON format and write to file
+                    json.dump(xyz_picks_image_space, f)
+
+                with open(os.path.join(bregma_results,f'{row.probe_id}_ccf.json'), "w") as f:
+                    # Serialize data to JSON format and write to file
+                    json.dump(xyz_picks_ccf, f)
 
             # Second, save the XYZ picks to the sorting folder for the gui.
             # This step will be skipped if there was a problem with the ephys pipeline.
             if os.path.isdir(os.path.join(results_folder,str(row.probe_name))):
-                with open(os.path.join(results_folder,str(row.probe_name),'xyz_picks.json'),"w") as f:
-                    json.dump(xyz_picks, f)
+                if not pd.isna(row.probe_shank):
+                    shank_id = row.probe_shank + 1
+                    image_space_filename = f'xyz_picks_shank{shank_id}_image_space.json'
+                    ccf_space_filename = f'xyz_picks_shank{shank_id}.json'
+                else:
+                    image_space_filename = 'xyz_picks_image_space.json'
+                    ccf_space_filename = 'xyz_picks.json'
+
+                with open(os.path.join(results_folder,str(row.probe_name), image_space_filename),"w") as f:
+                    json.dump(xyz_picks_image_space, f)
+                
+                with open(os.path.join(results_folder,str(row.probe_name), ccf_space_filename),"w") as f:
+                    json.dump(xyz_picks_ccf, f)
+            
                              
