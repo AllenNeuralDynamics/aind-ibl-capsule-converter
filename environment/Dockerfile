@@ -1,4 +1,4 @@
-# hash:sha256:ee3c33a52492b92d8b14dfaa58f90d5fc865935c69994b6150312ec3d7af0bcd
+# hash:sha256:2d5d8bdd5a9f01dbcb3592d14becbd35af09e3e3e43c4c5c8c43adb0f00f2014
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
@@ -14,7 +14,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U --no-cache-dir \
-    numpy \
     -e git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion#egg=aind-ephys-ibl-gui-conversion
 
 COPY postInstall /
