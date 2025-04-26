@@ -1,5 +1,5 @@
 metadata_version: 1
-name: Refactored IBL Ephys Alignment GUI w/ CCF Histology
+name: IBL Data Converter
 description: This will take in a manifest from the IBL Streamlit app and fetch assets
   and create a result that contains IBL formatted data that can be used in the alignment
   gui

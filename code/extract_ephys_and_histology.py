@@ -229,10 +229,10 @@ if __name__=='__main__':
             print(f'Failed to find {pattern!r}')
             continue
         else:
-            probe_data = read_neuroglancer_annotation_layers(annotation_file_path, layer_names = [row.probe_id])
-            this_probe_data = pd.DataFrame({'x':probe_data[row.probe_id][:,0],
+            probe_data = read_neuroglancer_annotation_layers(annotation_file_path, layer_names = [row.probe_id])[0]
+            this_probe_data = pd.DataFrame({'z':probe_data[row.probe_id][:,0],
                                            'y':probe_data[row.probe_id][:,1],
-                                           'z':probe_data[row.probe_id][:,2]})
+                                           'x':probe_data[row.probe_id][:,2]})
             x = extrema[0]-this_probe_data.x.values*1e3+offset[0]
             y  = this_probe_data.y.values*1e3+offset[1]
             z = -this_probe_data.z.values*1e3+offset[2]
