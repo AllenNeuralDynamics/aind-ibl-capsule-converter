@@ -1,20 +1,19 @@
-from aind_mri_utils.file_io.neuroglancer import read_neuroglancer_annotation_layers
-from aind_mri_utils.file_io.neuroglancer import get_image_source, _load_json_file
-import numpy as np
-from matplotlib import pyplot as plt
-import pandas as pd
-from pathlib import Path
 import os
 import shutil
 import warnings
 import zarr
-
-
-import ants
 import json
+from typing import Tuple, Any
+from pathlib import Path
+import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
+import ants
 from iblatlas import atlas
-
 import argparse
+
+from aind_mri_utils.file_io.neuroglancer import read_neuroglancer_annotation_layers
+from aind_mri_utils.file_io.neuroglancer import get_image_source, _load_json_file
 
 # Ephy readers
 from aind_ephys_ibl_gui_conversion.ephys import extract_continuous
@@ -42,6 +41,43 @@ def get_image_source(filename: str) -> list[str]:
 
     image_layers = [x for x in data['layers'] if x['type'] == 'image']
     return [layer['source'] if isinstance(layer['source'], str) else layer['source']['url'] for layer in image_layers] 
+
+def load_neuroglancer_points(
+    json_path: str,
+    layer_name: str
+) -> Tuple[pd.DataFrame, Any]:
+    """
+    Load a Neuroglancer state file, find the annotation layer called `layer_name`,
+    and return:
+      - a DataFrame of its point coordinates (columns ['x','y','z'], keeping only the first 3 dims)
+      - the `dimensions` field from the JSON state
+    
+    Returns:
+        (df_points, dimensions)
+    """
+    with open(json_path, 'r') as f:
+        state = json.load(f)
+
+    # grab dimensions (could be None if missing)
+    dimensions = state.get('dimensions')
+
+    # look for the matching annotation layer
+    for layer in state.get('layers', []):
+        if layer.get('type') == 'annotation' and layer.get('name') == layer_name:
+            points = [
+                ann['point'][:3]
+                for ann in layer.get('annotations', [])
+                if 'point' in ann and len(ann['point']) >= 3
+            ]
+            if not points:
+                print(f"No point annotations found in layer '{layer_name}'.")
+                return pd.DataFrame(columns=['z','y','x']), dimensions
+            df = pd.DataFrame(points, columns=['z', 'y', 'x'])
+            return df, dimensions
+
+    # if we get here, the layer wasn't found
+    print(f"No annotation layer named '{layer_name}' found in {json_path!r}.")
+    return pd.DataFrame(columns=['z','y','x']), dimensions
 
 if __name__=='__main__':
     
@@ -229,13 +265,10 @@ if __name__=='__main__':
             print(f'Failed to find {pattern!r}')
             continue
         else:
-            probe_data = read_neuroglancer_annotation_layers(annotation_file_path, layer_names = [row.probe_id])[0]
-            this_probe_data = pd.DataFrame({'z':probe_data[row.probe_id][:,0],
-                                           'y':probe_data[row.probe_id][:,1],
-                                           'x':probe_data[row.probe_id][:,2]})
-            x = extrema[0]-this_probe_data.x.values*1e3+offset[0]
-            y  = this_probe_data.y.values*1e3+offset[1]
-            z = -this_probe_data.z.values*1e3+offset[2]
+            this_probe_data, dims = load_neuroglancer_points(annotation_file_path, row.probe_id)
+            x = extrema[0]-this_probe_data.x.values*dims['x'][0]*1e3+offset[0]
+            y  = this_probe_data.y.values*dims['y'][0]*1e3+offset[1]
+            z = -this_probe_data.z.values*dims['z'][0]*1e3+offset[2]
 
             this_probe = np.vstack([x,y,z]).T
             this_probe = order_annotation_pts(this_probe)
@@ -280,9 +313,9 @@ if __name__=='__main__':
                 processed_recordings.append(row.sorted_recording)
 
             xyz_image_space = this_probe_data[['x', 'y', 'z']].to_numpy()
-            xyz_image_space[:, 0] = (extrema[0] - (xyz_image_space[:, 0] * 1000)) * 1000
-            xyz_image_space[:, 1] = xyz_image_space[:, 1] * 1000000
-            xyz_image_space[:, 2] = xyz_image_space[:, 2] * 1000000
+            xyz_image_space[:, 0] = (extrema[0] - (xyz_image_space[:, 0] * dims['x'][0]  * 1000)) * 1000
+            xyz_image_space[:, 1] = xyz_image_space[:, 1] * dims['y'][0] * 1000000
+            xyz_image_space[:, 2] = xyz_image_space[:, 2] * dims['z'][0] * 1000000
 
             xyz_picks_image_space = {'xyz_picks':xyz_image_space.tolist()}
             xyz_picks_ccf = {'xyz_picks': bregma_mlapdv.tolist()}
