@@ -1,0 +1,45 @@
+{
+	"version": 1,
+	"named_parameters": true,
+	"parameters": [
+		{
+			"id": "gt6AyiYN05y15ALJ",
+			"name": "Manifest File",
+			"param_name": "manifest",
+			"description": "CSV Annotation Manifest",
+			"help_text": "Annotation manifest (1 row per recording) paring annotated probe tracks with recording data.",
+			"type": "text",
+			"value_type": "string",
+			"default_value": "713506_test.csv",
+			"required": true
+		},
+		{
+			"id": "b4Jig8tch5Xt5NTw",
+			"name": "neuroglancer file",
+			"param_name": "neuroglancer",
+			"description": "Histology annotations of probe tracks",
+			"help_text": "Json file with probe annotations from neuroglancer",
+			"type": "text",
+			"value_type": "string",
+			"required": true
+		},
+		{
+			"id": "C5fAAEKk9jyh9fFZ",
+			"name": "legacy",
+			"param_name": "legacy",
+			"type": "text",
+			"value_type": "string"
+		},
+		{
+			"id": "y85wOvRSQfUyOJmd",
+			"name": "update_packages_from_source",
+			"param_name": "update_packages_from_source",
+			"description": "Always use the latest commit of github repo",
+			"help_text": "If 1, every run will install a python package from source repo https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion at HEAD on main ",
+			"type": "text",
+			"value_type": "integer",
+			"default_value": "1",
+			"maximum": 1
+		}
+	]
+}

@@ -13,7 +13,7 @@ from iblatlas import atlas
 import argparse
 
 from aind_mri_utils.file_io.neuroglancer import read_neuroglancer_annotation_layers
-from aind_mri_utils.file_io.neuroglancer import get_image_source, _load_json_file
+from aind_mri_utils.file_io.neuroglancer import _load_json_file
 
 # Ephy readers
 from aind_ephys_ibl_gui_conversion.ephys import extract_continuous

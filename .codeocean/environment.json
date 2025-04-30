@@ -16,14 +16,28 @@
 			],
 			"install_software_properties_common": true
 		},
-		"pip": {
+		"vscode": {
 			"packages": [
 				{
-					"name": "git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion#egg=aind-ephys-ibl-gui-conversion"
+					"name": "REditorSupport.R"
+				},
+				{
+					"name": "continue.continue"
+				},
+				{
+					"name": "ms-python.python"
+				},
+				{
+					"name": "ms-toolsai.jupyter"
+				},
+				{
+					"name": "reageyao.bioSyntax"
+				},
+				{
+					"name": "saoudrizwan.claude-dev"
 				}
 			],
-			"options": {},
-			"pre_install_options": {}
+			"version": "4.95.3"
 		}
 	}
 }
