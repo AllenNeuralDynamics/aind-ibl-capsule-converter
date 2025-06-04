@@ -145,7 +145,8 @@ if __name__=='__main__':
         registration_data_asset = os.path.join('/data/', smartspim_session_id)
         
         # Find data
-        alignment_channel = np.sort(os.listdir(os.path.join(registration_data_asset,'image_atlas_alignment')))[-1]
+        alignment_files = os.listdir(os.path.join(registration_data_asset,'image_atlas_alignment'))
+        alignment_channel = [channel_file for channel_file in alignment_files if 'Ex' in channel_file][0]
         prep_image_folder = os.path.join(registration_data_asset,'image_atlas_alignment',alignment_channel,'metadata','registration_metadata')
         moved_image_folder = os.path.join(registration_data_asset,'image_atlas_alignment',alignment_channel)
 
