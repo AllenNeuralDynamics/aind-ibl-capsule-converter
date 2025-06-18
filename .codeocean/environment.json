@@ -15,29 +15,6 @@
 				}
 			],
 			"install_software_properties_common": true
-		},
-		"vscode": {
-			"packages": [
-				{
-					"name": "REditorSupport.R"
-				},
-				{
-					"name": "continue.continue"
-				},
-				{
-					"name": "ms-python.python"
-				},
-				{
-					"name": "ms-toolsai.jupyter"
-				},
-				{
-					"name": "reageyao.bioSyntax"
-				},
-				{
-					"name": "saoudrizwan.claude-dev"
-				}
-			],
-			"version": "4.95.3"
 		}
 	}
 }
