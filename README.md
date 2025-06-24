@@ -19,6 +19,7 @@ If you have a manifest already made and just want to run this capsule as is, the
 * Upload neuroglancer json to data folder
 
 Then, in the app panel (shown) below, set the fields for manifest and neuroglancer json by pasting the path for each respective one. 
+
 ![image](https://github.com/user-attachments/assets/bd2c505c-e498-44a8-9a6f-0ae35414a1d4)
 
 After it runs, you will have to manually create an asset. When creating the asset make sure to do it at the level of the `Run with Parameters...`. 
