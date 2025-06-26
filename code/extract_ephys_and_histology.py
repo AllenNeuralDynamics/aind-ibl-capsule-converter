@@ -250,11 +250,15 @@ if __name__=='__main__':
     processed_recordings = []
 
     for ii,row in manifest_df.iterrows():
-        if row.annotation_format.lower()=='json':
+        try:
+            if row.annotation_format.lower()=='json':
+                extension = 'json'
+            else:
+                raise ValueError('Currently only jsons from neuroglancer are supported!')
+        except:
+            print('No annotation format specified. Assuming JSON.')
             extension = 'json'
-        else:
-            raise ValueError('Currently only jsons from neuroglancer are supported!')
-
+            
         # Find the sorted and origional data
         recording_id = row.sorted_recording.split('_sorted')[0]
         recording_folder = Path('/data/')/row.sorted_recording
@@ -297,22 +301,7 @@ if __name__=='__main__':
             bregma_mlapdv = brain_atlas.ccf2xyz(ccf_mlapdv, ccf_order='mlapdv')*1000000
             #xyz_picks = {'xyz_picks':bregma_mlapdv.tolist()}
 
-            if row.sorted_recording not in processed_recordings: # DEBUGGING HACK TO STOP EPHYS PROCESSING! FIX BEFORE RELEASE
-                print(f'Have not yet processed: {row.sorted_recording}. Doing that now.') 
-                os.makedirs(results_folder,exist_ok = True)
-                try:
-                    if not pd.isna(row.surface_finding):
-                        extract_continuous(recording_folder,results_folder, Path(f'/data/{row.surface_finding}'))
-                    else:
-                        extract_continuous(recording_folder,results_folder)
-                    extract_spikes(recording_folder,results_folder)
-                except ValueError:
-                    warnings.warn(f'Missing spike sorting for {row.sorted_recording}. Proceeding with histology only')
-                    # Coppy the spike sorting error message to help future debugging.
-                    shutil.copy(os.path.join(recording_folder,'output'),
-                        os.path.join(results_folder,'output'))
-                processed_recordings.append(row.sorted_recording)
-
+            
             xyz_image_space = this_probe_data[['x', 'y', 'z']].to_numpy()
             xyz_image_space[:, 0] = (extrema[0] - (xyz_image_space[:, 0] * dims['x'][0]  * 1000)) * 1000
             xyz_image_space[:, 1] = xyz_image_space[:, 1] * dims['y'][0] * 1000000
@@ -321,7 +310,8 @@ if __name__=='__main__':
             xyz_picks_image_space = {'xyz_picks':xyz_image_space.tolist()}
             xyz_picks_ccf = {'xyz_picks': bregma_mlapdv.tolist()}
 
-            if not pd.isna(row.probe_shank):
+            # assumes 1 shank unless probe shanks are specified.
+            if ('probe_shank' in row.keys()) and (not pd.isna(row.probe_shank)): 
                 shank_id = row.probe_shank + 1
                 # Save this in two locations. First, save sorted by filename
                 with open(os.path.join(bregma_results,f'{row.probe_id}_shank{shank_id}_image_space.json'), "w") as f:
@@ -342,19 +332,40 @@ if __name__=='__main__':
 
             # Second, save the XYZ picks to the sorting folder for the gui.
             # This step will be skipped if there was a problem with the ephys pipeline.
-            if os.path.isdir(os.path.join(results_folder,str(row.probe_name))):
-                if not pd.isna(row.probe_shank):
-                    shank_id = row.probe_shank + 1
-                    image_space_filename = f'xyz_picks_shank{shank_id}_image_space.json'
-                    ccf_space_filename = f'xyz_picks_shank{shank_id}.json'
-                else:
-                    image_space_filename = 'xyz_picks_image_space.json'
-                    ccf_space_filename = 'xyz_picks.json'
+            folder_path = os.path.join(results_folder, str(row.probe_name))
+            if not os.path.isdir(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
 
-                with open(os.path.join(results_folder,str(row.probe_name), image_space_filename),"w") as f:
-                    json.dump(xyz_picks_image_space, f)
-                
-                with open(os.path.join(results_folder,str(row.probe_name), ccf_space_filename),"w") as f:
-                    json.dump(xyz_picks_ccf, f)
+            if ('probe_shank' in row.keys()) and (not pd.isna(row.probe_shank)):
+                shank_id = row.probe_shank + 1
+                image_space_filename = f'xyz_picks_shank{shank_id}_image_space.json'
+                ccf_space_filename = f'xyz_picks_shank{shank_id}.json'
+            else:
+                image_space_filename = 'xyz_picks_image_space.json'
+                ccf_space_filename = 'xyz_picks.json'
+
+            with open(os.path.join(folder_path, image_space_filename),"w") as f:
+                json.dump(xyz_picks_image_space, f)
             
+            with open(os.path.join(folder_path, ccf_space_filename),"w") as f:
+                json.dump(xyz_picks_ccf, f)
+        
+            # Do ephys processing. 
+            # This is the last step here b.c. it is a annoyingly slow, and we need to give the the histology a chance to crash b.f. we reach it.
+            if row.sorted_recording not in processed_recordings: # DEBUGGING HACK TO STOP EPHYS PROCESSING! 
+                print(f'Have not yet processed: {row.sorted_recording}. Doing that now.') 
+                os.makedirs(results_folder,exist_ok = True)
+                try:
+                    if not pd.isna(row.surface_finding):
+                        extract_continuous(recording_folder,results_folder, probe_surface_finding = Path(f'/data/{row.surface_finding}'))
+                    else:
+                        extract_continuous(recording_folder,results_folder)
+                    extract_spikes(recording_folder,results_folder)
+                except ValueError:
+                    warnings.warn(f'Missing spike sorting for {row.sorted_recording}. Proceeding with histology only')
+                    # Coppy the spike sorting error message to help future debugging.
+                    shutil.copy(os.path.join(recording_folder,'output'),
+                        os.path.join(results_folder,'output'))
+                processed_recordings.append(row.sorted_recording)
+
                              
