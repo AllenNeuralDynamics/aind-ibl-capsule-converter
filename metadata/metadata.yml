@@ -1,7 +1,7 @@
 metadata_version: 1
 name: IBL Data Converter GitHub
-description: This will take in a manifest from the IBL Streamlit app and fetch assets
-  and create a result that contains IBL formatted data that can be used in the alignment
+description: This will take in a manifest and raw and sorted ephys data assets and
+  create a result that contains IBL formatted data that can be used in the alignment
   gui
 authors:
 - name: Yoni Browning
