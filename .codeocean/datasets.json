@@ -18,8 +18,16 @@
 			"mount": "ecephys_750108_2024-12-22_18-42-16"
 		},
 		{
-			"id": "1256eafe-2693-4e08-a3bd-29a2602ef7bf",
-			"mount": "771432_annotation_and_histology"
+			"id": "124cf67a-352f-41ca-b812-4203db71f653",
+			"mount": "750108_annotation_and_manifest"
+		},
+		{
+			"id": "18d8fb4a-7e6f-4009-9548-d06856b3dee5",
+			"mount": "ecephys_750107_2025-01-28_13-49-03_sorted_2025-02-13_04-07-40"
+		},
+		{
+			"id": "20e15f44-8841-46e2-9e82-0ac8c3033c67",
+			"mount": "754372_annotation_and_manifest"
 		},
 		{
 			"id": "21bbebc5-4061-4bac-8ec0-e04091f938ea",
@@ -42,8 +50,12 @@
 			"mount": "ecephys_750108_2024-12-23_16-02-56"
 		},
 		{
-			"id": "3e046f58-15ee-4e7e-b0ef-808bee0d9dec",
-			"mount": "754372_annotation_and_histology"
+			"id": "3a13749e-6a6b-4b01-b682-d72762fe4ee7",
+			"mount": "ecephys_750107_2025-01-28_13-49-03_1"
+		},
+		{
+			"id": "47f99e75-8379-4e7c-81e6-85002d6d1a85",
+			"mount": "771432_annotation_and_manifest"
 		},
 		{
 			"id": "4f96ab9f-1a2f-4898-b5fd-4bf1139ac66f",
@@ -56,10 +68,6 @@
 		{
 			"id": "5d8c6e95-1875-41fd-9ef2-a5ba772fee60",
 			"mount": "ecephys_750108_2024-12-23_14-51-45"
-		},
-		{
-			"id": "5ea3a4aa-5d25-4dc7-b429-1ffc6a46f4e1",
-			"mount": "771432_qbshanks_annotation_and_histology"
 		},
 		{
 			"id": "5f0bfb13-80c8-4e85-8159-b0c6eea4d5d6",
@@ -106,10 +114,6 @@
 			"mount": "ecephys_771432_2025-03-12_16-11-26"
 		},
 		{
-			"id": "90768451-d977-4003-9aba-6035cbd553e0",
-			"mount": "750108_annotation_and_histology"
-		},
-		{
 			"id": "9472ad83-483b-4ef3-89f5-0f36970acae3",
 			"mount": "ecephys_750108_2024-12-22_17-01-43_sorted_2025-02-15_11-08-07"
 		},
@@ -130,12 +134,20 @@
 			"mount": "ecephys_754372_2025-01-14_17-32-49"
 		},
 		{
+			"id": "d13f992d-7c71-4b5e-9d68-1388165cc799",
+			"mount": "ecephys_750107_2025-01-28_13-49-03"
+		},
+		{
 			"id": "d5f9aaf7-a8c2-4f74-95de-13e86ae95ae9",
 			"mount": "spim_template_to_ccf"
 		},
 		{
 			"id": "efc08356-6686-4ffd-afbd-1e102ee2ec2b",
 			"mount": "SmartSPIM_754372_2025-01-31_11-27-18_stitched_2025-04-20_17-04-49"
+		},
+		{
+			"id": "f4e9b672-56cc-473d-b963-675c2097f3a9",
+			"mount": "SmartSPIM_750107_2025-02-21_11-11-04_stitched_2025-03-06_07-02-17"
 		},
 		{
 			"id": "fd5a8c6c-0da5-4b00-a676-ddbe273a3a5d",
