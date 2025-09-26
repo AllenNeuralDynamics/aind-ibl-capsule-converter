@@ -11,7 +11,7 @@
 #         image_in_template = ants.image_read(os.path.join(registration_data_asset,'registration',fl))
 #         outimg = ants.apply_transforms(ccf_25,image_in_template,['/data/spim_template_to_ccf/syn_1Warp.nii.gz','/data/spim_template_to_ccf/syn_0GenericAffine.mat'])
 #         ants.image_write(outimg,os.path.join(histology_results,f'histology_{chname}.nrrd'))
-    
+
 
 #     # Also get the image-space warping of the CCF.
 #     image_histology_results = os.path.join('/results',str(df.mouseid[0]),'image_space_histology')
@@ -69,8 +69,8 @@
 #         recording_id = row.sorted_recording.split('_sorted')[0]
 #         recording_folder = Path('/data/')/row.sorted_recording
 #         results_folder = Path('/results/')/str(row.mouseid)/recording_id
-        
-        
+
+
 #         if not os.path.exists(Path(annotation_file_path)/f'{row.probe_file}.{extension}'):
 #             missing = Path(annotation_file_path)/f'{row.probe_file}.{extension}'
 #             print(f'Failed to find {missing}')
@@ -79,14 +79,14 @@
 #             if extension == 'swc'
 #                 print(row.probe_file)
 #                 probe_data = import_swc_probe_data(Path(annotation_file_path)/f'{row.probe_file}.{extension}')
-#             else 
-                
+#             else
+
 
 #         # do the preprocessing for all channels in the given recording
-#         # Any errors here are likely due files not being found. 
+#         # Any errors here are likely due files not being found.
 #         # Check that the correct data are attached to the capsual!
 #         if row.sorted_recording not in processed_recordings:
-#             print(f'Have not yet processed: {row.sorted_recording}. Doing that now.') 
+#             print(f'Have not yet processed: {row.sorted_recording}. Doing that now.')
 #             os.makedirs(results_folder,exist_ok = True)
 #             extract_spikes(recording_folder,results_folder)
 #             extract_continuous(recording_folder,results_folder)
@@ -103,7 +103,7 @@
 #         # This math handles different readout conventions.
 #         x = extrema[0]-(this_probe_data.x/1000).values+offset[0]
 #         y = (this_probe_data.y/1000).values+offset[1]
-#         z = -(this_probe_data.z/1000).values+offset[2]    
+#         z = -(this_probe_data.z/1000).values+offset[2]
 #         this_probe = np.vstack([x,y,z]).T
 #         create_slicer_fcsv(os.path.join(spim_results,f'{probe_name}.fcsv'),this_probe,direction = 'LPS')
 
