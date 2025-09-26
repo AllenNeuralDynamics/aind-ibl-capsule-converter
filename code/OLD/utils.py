@@ -4,10 +4,12 @@ Low-level functions to work in frequency domain for n-dim arrays
 Copied from https://github.com/int-brain-lab/ibl-neuropixel/ on 2/1/2024
 
 """
+
 from math import pi
 
 import numpy as np
 import scipy.fft
+
 
 def rms(x, axis=-1):
     """
@@ -17,7 +19,8 @@ def rms(x, axis=-1):
     :param axis: (optional, -1)
     :return: numpy array
     """
-    return np.sqrt(np.mean(x ** 2, axis=axis))
+    return np.sqrt(np.mean(x**2, axis=axis))
+
 
 def _fcn_extrap(x, f, bounds):
     """
@@ -48,7 +51,10 @@ def fcn_cosine(bounds, gpu=False):
         gp = np
 
     def _cos(x):
-        return (1 - gp.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * gp.pi)) / 2
+        return (
+            1 - gp.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * gp.pi)
+        ) / 2
+
     func = lambda x: _fcn_extrap(x, _cos, bounds)  # noqa
     return func
 
@@ -62,7 +68,9 @@ def fscale(ns, si=1, one_sided=False):
     :param one_sided: if True, returns only positive frequencies
     :return: fscale: numpy vector containing frequencies in Hertz
     """
-    fsc = np.arange(0, np.floor(ns / 2) + 1) / ns / si  # sample the frequency scale
+    fsc = (
+        np.arange(0, np.floor(ns / 2) + 1) / ns / si
+    )  # sample the frequency scale
     if one_sided:
         return fsc
     else:
@@ -79,7 +87,7 @@ def bp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='bp')
+    return _freq_filter(ts, si, b, axis=axis, typ="bp")
 
 
 def lp(ts, si, b, axis=None):
@@ -92,7 +100,7 @@ def lp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='lp')
+    return _freq_filter(ts, si, b, axis=axis, typ="lp")
 
 
 def hp(ts, si, b, axis=None):
@@ -105,41 +113,47 @@ def hp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='hp')
+    return _freq_filter(ts, si, b, axis=axis, typ="hp")
 
 
-def _freq_filter(ts, si, b, axis=None, typ='lp'):
+def _freq_filter(ts, si, b, axis=None, typ="lp"):
     """
-        Wrapper for hp/lp/bp filters
+    Wrapper for hp/lp/bp filters
     """
     if axis is None:
         axis = ts.ndim - 1
     ns = ts.shape[axis]
     f = fscale(ns, si=si, one_sided=True)
-    if typ == 'bp':
-        filc = _freq_vector(f, b[0:2], typ='hp') * _freq_vector(f, b[2:4], typ='lp')
+    if typ == "bp":
+        filc = _freq_vector(f, b[0:2], typ="hp") * _freq_vector(
+            f, b[2:4], typ="lp"
+        )
     else:
         filc = _freq_vector(f, b, typ=typ)
     if axis < (ts.ndim - 1):
         filc = filc[:, np.newaxis]
-    return np.real(np.fft.ifft(np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis))
+    return np.real(
+        np.fft.ifft(
+            np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis
+        )
+    )
 
 
-def _freq_vector(f, b, typ='lp'):
+def _freq_vector(f, b, typ="lp"):
     """
-        Returns a frequency modulated vector for filtering
+    Returns a frequency modulated vector for filtering
 
-        :param f: frequency vector, uniform and monotonic
-        :param b: 2 bounds array
-        :return: amplitude modulated frequency vector
+    :param f: frequency vector, uniform and monotonic
+    :param b: 2 bounds array
+    :return: amplitude modulated frequency vector
     """
     filc = fcn_cosine(b)(f)
-    if typ.lower() in ['hp', 'highpass']:
+    if typ.lower() in ["hp", "highpass"]:
         return filc
-    elif typ.lower() in ['lp', 'lowpass']:
+    elif typ.lower() in ["lp", "lowpass"]:
         return 1 - filc
 
-    
+
 def fexpand(x, ns=1, axis=None):
     """
     Reconstructs full spectrum from positive frequencies
@@ -154,7 +168,9 @@ def fexpand(x, ns=1, axis=None):
     # dec = int(ns % 2) * 2 - 1
     # xcomp = np.conj(np.flip(x[..., 1:x.shape[-1] + dec], axis=axis))
     ilast = int((ns + (ns % 2)) / 2)
-    xcomp = np.conj(np.flip(np.take(x, np.arange(1, ilast), axis=axis), axis=axis))
+    xcomp = np.conj(
+        np.flip(np.take(x, np.arange(1, ilast), axis=axis), axis=axis)
+    )
     return np.concatenate((x, xcomp), axis=axis)
 
 
@@ -167,6 +183,7 @@ class WindowGenerator(object):
 
     Example of implementations in test_dsp.py.
     """
+
     def __init__(self, ns, nswin, overlap):
         """
         :param ns: number of sample of the signal along the direction to be windowed
@@ -176,7 +193,9 @@ class WindowGenerator(object):
         self.ns = int(ns)
         self.nswin = int(nswin)
         self.overlap = int(overlap)
-        self.nwin = int(np.ceil(float(ns - nswin) / float(nswin - overlap))) + 1
+        self.nwin = (
+            int(np.ceil(float(ns - nswin) / float(nswin - overlap))) + 1
+        )
         self.iw = None
 
     @property
@@ -225,4 +244,9 @@ class WindowGenerator(object):
         :param fs: sampling frequency (Hz)
         :return: time axis scale
         """
-        return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.firstlast])
+        return np.array(
+            [
+                (first + (last - first - 1) / 2) / fs
+                for first, last in self.firstlast
+            ]
+        )
