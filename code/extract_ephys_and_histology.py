@@ -179,7 +179,22 @@ def main():
     # However, if an alternative path is passed as "legacy_registration", we will pull the regisration from there.
     # This assumes that you used Di's conversion capsual. If you don't know what that means, you probably didnt...
 
-    if args.legacy_registration == None:
+    if args.legacy_registration:
+        # Handle legacy path
+        if "/data/" not in args.legacy_registration:
+            registration_data_asset = os.path.join(
+                "/data/", args.legacy_registration
+            )
+        else:
+            registration_data_asset = args.legacy_registration
+
+        prep_image_folder = os.path.join(
+            registration_data_asset, "registration"
+        )
+        moved_image_folder = os.path.join(
+            registration_data_asset, "registration"
+        )
+    else:
         # ... discover SmartSPIM session, alignment channel, and folders ...
         #
         # Image source will be in a neuroglancer layer.
@@ -214,22 +229,6 @@ def main():
         )
         moved_image_folder = os.path.join(
             registration_data_asset, "image_atlas_alignment", alignment_channel
-        )
-
-    else:
-        # Handle legacy path
-        if "/data/" not in args.legacy_registration:
-            registration_data_asset = os.path.join(
-                "/data/", args.legacy_registration
-            )
-        else:
-            registration_data_asset = args.legacy_registration
-
-        prep_image_folder = os.path.join(
-            registration_data_asset, "registration"
-        )
-        moved_image_folder = os.path.join(
-            registration_data_asset, "registration"
         )
 
     # ------------------------------------------------------------
@@ -274,7 +273,7 @@ def main():
         os.path.join(image_histology_results, "histology_registration.nii.gz"),
     )
 
-    if args.legacy_registration is not None:
+    if args.legacy_registration:
         # ... iterate moved_* files, apply template->CCF transforms, write outputs ...
         # Handle other channels: This is a work in progress
         other_files = [
