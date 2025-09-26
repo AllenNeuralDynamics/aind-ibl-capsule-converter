@@ -122,11 +122,17 @@ def parse_args():
 
 
 def main():
+    # ------------------------------------------------------------
+    # Parse CLI arguments and normalize optional flags/values
+    # ------------------------------------------------------------
     args = parse_args()
     if args.legacy_registration == "":
         args.legacy_registration = None
 
-    # Find the neuroglancer file
+    # ------------------------------------------------------------
+    # Resolve and validate input paths (neuroglancer & manifest)
+    # Always map to /data/* so downstream code has absolute paths
+    # ------------------------------------------------------------
     if "/data/" not in args.neuroglancer:
         neuroglancer_file_path = os.path.join("/data/", args.neuroglancer)
     else:
@@ -139,15 +145,18 @@ def main():
     else:
         annotation_manifest_path = args.annotation_manifest
 
-    # for debugging, keep a record of the manifest used
+    # ------------------------------------------------------------
+    # Snapshot the manifest for reproducibility/debugging
+    # ------------------------------------------------------------
     Path("/results/manifest.csv").write_bytes(
         Path(annotation_manifest_path).read_bytes()
     )
 
-    # Read the annotation-ephys pairings
+    # ------------------------------------------------------------
+    # Load annotation–ephys pairings and reference volumes/atlas
+    # (template, CCF, labels, and AllenAtlas helper)
+    # ------------------------------------------------------------
     manifest_df = pd.read_csv(annotation_manifest_path)
-
-    # Load the template and the ccf
     template = ants.image_read(
         "/data/smartspim_lca_template/smartspim_lca_template_25.nii.gz"
     )
@@ -159,10 +168,20 @@ def main():
     )
     brain_atlas = atlas.AllenAtlas(25, hist_path="/scratch/")
 
+    # ------------------------------------------------------------
+    # Determine registration source:
+    #  - Default: use pipeline outputs referenced by Neuroglancer
+    #  - Legacy mode: use provided registration directory layout
+    # This block resolves folders for preprocessed & moved images.
+    # ------------------------------------------------------------
+    #
     # Default is to use the pipeline registration.
     # However, if an alternative path is passed as "legacy_registration", we will pull the regisration from there.
     # This assumes that you used Di's conversion capsual. If you don't know what that means, you probably didnt...
+
     if args.legacy_registration == None:
+        # ... discover SmartSPIM session, alignment channel, and folders ...
+        #
         # Image source will be in a neuroglancer layer.
         # This assumes that a matching stiched asset is attached to the file.
         sources = get_image_source(neuroglancer_file_path)
@@ -213,18 +232,35 @@ def main():
             registration_data_asset, "registration"
         )
 
+    # ------------------------------------------------------------
+    # Inspect image geometry to compute physical extent and offset
+    # (used later to convert NG pixel coords to physical coords)
+    # ------------------------------------------------------------
     zarr_read = ants.image_read(
         os.path.join(prep_image_folder, "prep_n4bias.nii.gz")
     )
     extrema = np.array(zarr_read.shape) * np.array(zarr_read.spacing)
     offset = zarr_read.origin
 
-    # Get CCF space histology for this mouse
+    # ------------------------------------------------------------
+    # Prepare result directories for histology products
+    #   - CCF-space outputs
+    #   - Image-space (native SmartSPIM) outputs
+    # ------------------------------------------------------------
     histology_results = os.path.join(
         "/results", str(manifest_df.mouseid[0]), "ccf_space_histology"
     )
     os.makedirs(histology_results, exist_ok=True)
+    image_histology_results = os.path.join(
+        "/results", str(manifest_df.mouseid[0]), "image_space_histology"
+    )
+    os.makedirs(image_histology_results, exist_ok=True)
 
+    # ------------------------------------------------------------
+    # Write registration-channel volumes to CCF and image space
+    # (pipeline already transformed the registration channel)
+    # ------------------------------------------------------------
+    #
     # Read the registration channel data. No need to re-transform since this was done as part of inital registration
     outimg = ants.image_read(
         os.path.join(moved_image_folder, "moved_ls_to_ccf.nii.gz")
@@ -232,18 +268,14 @@ def main():
     ants.image_write(
         outimg, os.path.join(histology_results, "histology_registration.nrrd")
     )
-
     # Handle other channel data. Depending on legacy flag, this may still need to be computed.
-    image_histology_results = os.path.join(
-        "/results", str(manifest_df.mouseid[0]), "image_space_histology"
-    )
-    os.makedirs(image_histology_results, exist_ok=True)
     shutil.copy(
         os.path.join(prep_image_folder, "prep_n4bias.nii.gz"),
         os.path.join(image_histology_results, "histology_registration.nii.gz"),
     )
 
-    if args.legacy_registration != None:
+    if args.legacy_registration is not None:
+        # ... iterate moved_* files, apply template->CCF transforms, write outputs ...
         # Handle other channels: This is a work in progress
         other_files = [
             x
@@ -275,6 +307,8 @@ def main():
                 ),
             )
     else:
+        # ... enumerate OME-Zarr channels, load, write image-space NIfTI,
+        #     then chain transforms (ls->template, template->CCF) and save ...
         # find channels not used for alignment
         stitched_zarrs = os.path.join(
             registration_data_asset, "image_tile_fusing", "OMEZarr"
@@ -332,6 +366,12 @@ def main():
                 ),
             )
 
+    # ------------------------------------------------------------
+    # Push atlas content into image space:
+    # Transform the CCF template and label volumes into native image space
+    # for visualization/overlay in SmartSPIM coordinates.
+    # ------------------------------------------------------------
+    #
     # Tranform the CCF into image space
     ccf_in_image_space = ants.apply_transforms(
         zarr_read,
@@ -378,6 +418,11 @@ def main():
         ),
     )
 
+    # ------------------------------------------------------------
+    # Create per-space track-data output roots:
+    #   - SmartSPIM (spim), template, CCF, and IBL bregma-XYZ
+    # ------------------------------------------------------------
+    #
     # Prep file save local
     track_results = (
         Path("/results/") / str(manifest_df.mouseid[0]) / "track_data"
@@ -392,9 +437,23 @@ def main():
     bregma_results = os.path.join(track_results, "bregma_xyz")
     os.makedirs(bregma_results, exist_ok=True)
 
+    # ------------------------------------------------------------
+    # Iterate over manifest rows:
+    #  - Locate per-probe annotations
+    #  - Convert NG coords -> image physical (LPS) coords
+    #  - Save FCSV for SmartSPIM (spim) and template/CCF spaces
+    #  - Convert to IBL xyz-picks (bregma ML/AP/DV) and save JSON
+    # ------------------------------------------------------------
     processed_recordings = []
 
     for ii, row in manifest_df.iterrows():
+        # ... detect annotation format; find annotation file path ...
+        # ... load NG points; map to image space using spacing/origin ...
+        # ... order points tip-to-surface and write slicer FCSV for spim ...
+        # ... transform points: image -> template -> CCF, write FCSV ...
+        # ... convert CCF (RAS) to IBL bregma ML/AP/DV and image-space picks ...
+        # ... write xyz_picks JSONs (per-shank if specified) to bregma_results ...
+        # ... also copy xyz_picks into sorter’s results folder for the GUI ...
         try:
             if row.annotation_format.lower() == "json":
                 extension = "json"
@@ -574,11 +633,18 @@ def main():
             with open(os.path.join(folder_path, ccf_space_filename), "w") as f:
                 json.dump(xyz_picks_ccf, f)
 
+            # --------------------------------------------------------
+            # (Optional) Ephys extraction per recording:
+            # Run only once per sorted recording; skip if already done.
+            # Extract continuous signals and spikes; continue on failures.
+            # --------------------------------------------------------
+            #
             # Do ephys processing.
             # This is the last step here b.c. it is a annoyingly slow, and we need to give the the histology a chance to crash b.f. we reach it.
             if (
                 row.sorted_recording not in processed_recordings
             ):  # DEBUGGING HACK TO STOP EPHYS PROCESSING!
+                # ... create results folder, run extract_continuous/spikes with guards ...
                 print(
                     f"Have not yet processed: {row.sorted_recording}. Doing that now."
                 )
