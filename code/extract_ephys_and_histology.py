@@ -10,7 +10,7 @@ import ants
 import numpy as np
 import pandas as pd
 
-# Ephy readers
+# Ephys readers
 from aind_ephys_ibl_gui_conversion.ephys import (
     extract_continuous,
     extract_spikes,
@@ -87,7 +87,7 @@ def load_neuroglancer_points(
     return pd.DataFrame(columns=["z", "y", "x"]), dimensions
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -118,6 +118,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
     if args.legacy_registration == "":
         args.legacy_registration = None
 
@@ -401,7 +406,7 @@ if __name__ == "__main__":
             print("No annotation format specified. Assuming JSON.")
             extension = "json"
 
-        # Find the sorted and origional data
+        # Find the sorted and original data
         recording_id = row.sorted_recording.split("_sorted")[0]
         recording_folder = Path("/data/") / row.sorted_recording
         results_folder = Path("/results/") / str(row.mouseid) / recording_id
@@ -600,3 +605,7 @@ if __name__ == "__main__":
                         os.path.join(results_folder, "output"),
                     )
                 processed_recordings.append(row.sorted_recording)
+
+
+if __name__ == "__main__":
+    main()
