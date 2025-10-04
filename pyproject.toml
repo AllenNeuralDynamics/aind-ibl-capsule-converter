@@ -7,22 +7,28 @@ name = "aind-ibl-capsule-converter"
 version = "0.1.0"
 description = "CodeOcean capsule for converting AIND electrophysiology data to IBL ALF format with histology alignment"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     { name = "Allen Institute for Neural Dynamics" },
     { name = "Yoni Browning", email = "yoni.browning@alleninstitute.org" },
-    {name = "Ben Hardcastle"},
-    {name = "Arjun Sridhar"}
+    { name = "Ben Hardcastle" },
+    { name = "Arjun Sridhar" },
 ]
-keywords = ["neuroscience", "electrophysiology", "IBL", "data-conversion", "AIND"]
+keywords = [
+    "neuroscience",
+    "electrophysiology",
+    "IBL",
+    "data-conversion",
+    "AIND",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
-    "Topic :: Scientific/Engineering :: Information Analysis"
+    "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 
 dependencies = [
@@ -32,15 +38,17 @@ dependencies = [
     "zarr>=2.10.0",
     "antspyx>=0.3.0",
     "iblatlas>=0.4.0",
+    "aind-anatomical-utils>=0.2,<0.3",
     "aind-mri-utils>=0.1.0",
-    "aind-ephys-ibl-gui-conversion @ git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@main"
+    "aind-ephys-ibl-gui-conversion @ git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@main",
+    "aind-registration-utils>=0.1,<0.3",
+    "aind-s3-cache>=0.1",
+    "aind-zarr-utils>=0.8",
 ]
 
 [dependency-groups]
-dev = [
-    'codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate'
-]
-jupyter = [{include-group = 'dev'}, 'ipykernel', 'pip']
+dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
+jupyter = [{ include-group = 'dev' }, 'ipykernel', 'pip']
 
 [project.scripts]
 aind-ibl-convert = "aind_ibl_capsule_converter.extract_ephys_and_histology:main"
@@ -59,21 +67,21 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
     "Q",
     "RUF100",
     "C90",
 ]
 ignore = [
-    "E501",  # line too long, handled by formatter
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+    "E501", # line too long, handled by formatter
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
 ]
 
 [tool.ruff.format]
