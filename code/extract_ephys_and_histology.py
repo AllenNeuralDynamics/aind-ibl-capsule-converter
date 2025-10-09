@@ -122,10 +122,25 @@ class InputPaths:
 
 
 @dataclass(frozen=True)
+class ReferencePaths:
+    template_25: Path = Path(
+        "/data/smartspim_lca_template/smartspim_lca_template_25.nii.gz"
+    )
+    ccf_25: Path = Path(
+        "/data/allen_mouse_ccf/average_template/average_template_25.nii.gz"
+    )
+    ccf_labels_25: Path = Path(
+        "/data/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz"
+    )
+    atlas_histology_path: Path = Path(
+        "/data/spim_template_to_ccf/syn_*.{nii.gz,mat}"
+    )
+
+
+@dataclass(frozen=True)
 class ReferenceVolumes:
     template_25: ants.ANTsImage
     ccf_25: ants.ANTsImage
-    ccf_labels_25: ants.ANTsImage
     # Object exposing ccf2xyz; keep it typed as Any if needed
     brain_atlas: atlas.AllenAtlas
 
@@ -207,12 +222,6 @@ def parse_args():
         dest="neuroglancer",
         default="Probes_561_729293_Day1and2.json",
         help="Directory containing probe annotations",
-    )
-
-    parser.add_argument(
-        "--update_packages_from_source",
-        default=None,
-        help="Unused in capsule run script",
     )
 
     args = parser.parse_args()
@@ -476,9 +485,8 @@ def _process_additional_channels_pipeline(
         ants.image_write(
             ch_in_ccf, str(outputs.histology_ccf / f"histology_{ch_str}.nrrd")
         )
-        a_bugged_img = (
-            img_bugged  # Get the histology domain of the buggy ccf transform
-        )
+        # Get the histology domain of the buggy ccf transform
+        a_bugged_img = img_bugged
     return a_bugged_img
 
 
@@ -492,7 +500,7 @@ def _apply_ccf_pt_tx_buggy_domain_then_fix(
     pt_tx_str = asset_info.pipeline_registration_chains.pt_tx_str
     pt_tx_inverted = asset_info.pipeline_registration_chains.pt_tx_inverted
     # This will be in the buggy domain, but we can fix that later
-    ccf_space_in_hist_img: ANTsImage = ants.apply_transforms(
+    ccf_space_img_in_hist_space: ANTsImage = ants.apply_transforms(
         fixed=buggy_hist_domain_img,
         moving=ccf_space_img,
         transformlist=pt_tx_str,
@@ -500,13 +508,22 @@ def _apply_ccf_pt_tx_buggy_domain_then_fix(
         **kwargs,
     )
     # Update the spatial domain to match the real image
-    ccf_space_in_hist_img.set_spacing(hist_domain_img.spacing)
-    ccf_space_in_hist_img.set_origin(hist_domain_img.origin)
-    ccf_space_in_hist_img.set_direction(hist_domain_img.direction)
-    return ccf_space_in_hist_img
+    ccf_space_img_in_hist_space.set_spacing(hist_domain_img.spacing)
+    ccf_space_img_in_hist_space.set_origin(hist_domain_img.origin)
+    ccf_space_img_in_hist_space.set_direction(hist_domain_img.direction)
+    return ccf_space_img_in_hist_space
 
 
-def _push_atlas_to_image_space(
+def _compress_nrrd(input_path: Path, output_path: Path) -> None:
+    img = sitk.ReadImage(str(input_path))
+    # Write to temporary compressed nrrd
+    temp_output_path = output_path.with_suffix(".temp.nrrd")
+    sitk.WriteImage(img, str(temp_output_path), useCompression=True)
+    # Replace original file with compressed version
+    temp_output_path.replace(output_path)
+
+
+def _transform_ccf_to_image_space(
     asset_info: AssetInfo,
     refs: ReferenceVolumes,
     raw_img: ANTsImage,
@@ -524,9 +541,12 @@ def _push_atlas_to_image_space(
         hist_domain_img=raw_img,
         asset_info=asset_info,
     )
-    ants.image_write(
-        ccf_in_hist_img, str(outputs.histology_img / "ccf_in_mouse.nrrd")
-    )
+    ccf_in_hist_img_path = outputs.histology_img / "ccf_in_mouse.nrrd"
+    ants.image_write(ccf_in_hist_img, str(ccf_in_hist_img_path))
+    _compress_nrrd(ccf_in_hist_img_path, ccf_in_hist_img_path)
+
+    # Lateralize and compact the labels before transforming
+    ccf_labels_25_img = sitk.ReadImage()
     ccf_labels_in_hist_img = _apply_ccf_pt_tx_buggy_domain_then_fix(
         refs.ccf_labels_25,
         buggy_hist_domain_img=raw_img_domain_bugged,
@@ -534,10 +554,14 @@ def _push_atlas_to_image_space(
         asset_info=asset_info,
         interpolator="genericLabel",
     )
+    ccf_labels_in_hist_img_path = (
+        outputs.histology_img / "labels_in_mouse.nrrd"
+    )
     ants.image_write(
         ccf_labels_in_hist_img,
-        str(outputs.histology_img / "labels_in_mouse.nrrd"),
+        str(ccf_labels_in_hist_img_path),
     )
+    _compress_nrrd(ccf_labels_in_hist_img_path, ccf_labels_in_hist_img_path)
 
 
 # ---- Stage 7: per-row processing (probe-centric) -----------------------------
@@ -843,7 +867,7 @@ def _process_histology_and_ephys(args: Args):
         )
     else:
         raw_img_domain_bugged = a_bugged_img
-    _push_atlas_to_image_space(
+    _transform_ccf_to_image_space(
         asset_info, refs, raw_img, raw_img_domain_bugged, out
     )
     raw_img_stub, _ = zarr_to_sitk_stub(

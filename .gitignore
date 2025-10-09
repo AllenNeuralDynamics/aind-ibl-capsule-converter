@@ -148,3 +148,9 @@ dmypy.json
 /data/
 
 .vscode
+
+# Code folder stuff
+code/__pycache__/
+code/*.pyc
+code/*.pyo
+code/*.pyd
