@@ -1,4 +1,4 @@
-# hash:sha256:ce5b7a1263a97716a06e554f59f974db04098904c56cc1ed8a46870327f2af02
+# hash:sha256:57b4c2996516b87889b919322ffd433742f5d9f83db79dbe021301aac17fb14f
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
 
@@ -32,6 +32,21 @@ RUN --mount=type=secret,id=git-access-token \
     pandas==2.3.2 \
     zarr==2.18.3 \
     -e git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@99446c473536069be1770cfee1c1a06b9e7df8db#egg=aind-ephys-ibl-gui-conversion
+
+ADD "https://github.com/coder/code-server/releases/download/v4.100.3/code-server-4.100.3-linux-amd64.tar.gz" /.code-server/code-server.tar.gz
+	
+RUN cd /.code-server \
+    && tar -xvf code-server.tar.gz \
+    && rm code-server.tar.gz \
+    && ln -s /.code-server/code-server-4.100.3-linux-amd64/bin/code-server /usr/bin/code-server \
+    && mkdir -p /.vscode/extensions
+
+RUN code-server --extensions-dir="/.vscode/extensions" --install-extension continue.continue \
+    && code-server --extensions-dir="/.vscode/extensions" --install-extension ms-python.python \
+    && code-server --extensions-dir="/.vscode/extensions" --install-extension ms-toolsai.jupyter \
+    && code-server --extensions-dir="/.vscode/extensions" --install-extension reageyao.biosyntax \
+    && code-server --extensions-dir="/.vscode/extensions" --install-extension reditorsupport.r \
+    && code-server --extensions-dir="/.vscode/extensions" --install-extension saoudrizwan.claude-dev
 
 COPY postInstall /
 RUN --mount=type=secret,id=secrets . /run/secrets/secrets \

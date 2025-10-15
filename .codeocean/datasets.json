@@ -2,12 +2,12 @@
 	"version": 1,
 	"attached_datasets": [
 		{
-			"id": "18ea3da2-4f4b-4ecc-ba11-a6d85ca8264b",
-			"mount": "iblatlas_allenatlas"
-		},
-		{
 			"id": "30bf0bcc-6467-4b49-a177-a1a1424ff1f6",
 			"mount": "smartspim_lca_template"
+		},
+		{
+			"id": "60fe3cc1-2c31-4435-a375-620be2f9579b",
+			"mount": "iblatlas_allenatlas"
 		},
 		{
 			"id": "79bf9032-5cff-4038-b2b8-8a24fa098e3b",
@@ -20,6 +20,14 @@
 		{
 			"id": "d5f9aaf7-a8c2-4f74-95de-13e86ae95ae9",
 			"mount": "spim_template_to_ccf"
+		},
+		{
+			"id": "df893a5c-e342-43ec-af7e-feef6f7e52f4",
+			"mount": "776259_annotation_and_manifest"
+		},
+		{
+			"id": "fa068eb5-72da-4667-b0b4-266abb071451",
+			"mount": "SmartSPIM_776259_2025-06-26_20-44-52_stitched_2025-07-22_11-35-09"
 		}
 	]
 }
