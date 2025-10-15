@@ -6,6 +6,10 @@
 			"mount": "smartspim_lca_template"
 		},
 		{
+			"id": "37534ad8-cc73-4f96-a5ae-1aab5033fe57",
+			"mount": "ecephys_776259_2025-04-09_17-25-12_nwb_redo"
+		},
+		{
 			"id": "60fe3cc1-2c31-4435-a375-620be2f9579b",
 			"mount": "iblatlas_allenatlas"
 		},
