@@ -70,7 +70,6 @@ import json
 import logging
 import shutil
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -187,13 +186,6 @@ class AssetInfo:
 
 
 @dataclass(frozen=True)
-class Geometry:
-    extrema_mm: np.ndarray  # shape (3,)
-    origin_mm: Sequence[float]
-    exemplar_image: ants.ANTsImage
-
-
-@dataclass(frozen=True)
 class OutputDirs:
     histology_ccf: Path
     histology_img: Path
@@ -210,6 +202,51 @@ class ProcessResult:
     recording_id: str
     wrote_files: bool
     skipped_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ManifestRow:
+    probe_id: str
+    probe_name: str
+    probe_file: str
+    sorted_recording: str
+    mouseid: str
+    annotation_format: str = "json"
+    probe_shank: int | None = None
+    surface_finding: Path | None = None
+    row_index: int | None = None  # provenance/debug
+
+    @property
+    def recording_id(self) -> str:
+        # centralize the split logic used in multiple places
+        return self.sorted_recording.split("_sorted")[0]
+
+    def gui_folder(self, outputs: OutputDirs) -> Path:
+        return outputs.tracks_root.parent / self.recording_id / self.probe_name
+
+    @classmethod
+    def from_series(cls, s: pd.Series) -> ManifestRow:
+        # normalize types and handle NA robustly
+        def opt_int(x):
+            try:
+                return int(x) if pd.notna(x) else None
+            except Exception:
+                return None
+
+        def opt_path(x):
+            return Path(str(x)) if pd.notna(x) and str(x) else None
+
+        return cls(
+            probe_id=str(s.get("probe_id")),
+            probe_name=str(s.get("probe_name")),
+            probe_file=str(s.get("probe_file")),
+            sorted_recording=str(s.get("sorted_recording")),
+            mouseid=str(s.get("mouseid")),
+            annotation_format=str(s.get("annotation_format", "json")).lower(),
+            probe_shank=opt_int(s.get("probe_shank")),
+            surface_finding=opt_path(s.get("surface_finding")),
+            row_index=int(s.name) if hasattr(s, "name") else None,
+        )
 
 
 # ---- Stage 1: args and input resolution -------------------------------------
@@ -330,38 +367,6 @@ def _find_asset_info(paths: InputPaths) -> AssetInfo:
         pipeline_registration_chains=pipeline_reg_info,
         registration_dir_path=registration_dir_path,
         registration_in_ccf_precomputed=registration_in_ccf_precomputed,
-    )
-
-
-# ---- Stage 2: references, registration layout, geometry ---------------------
-
-
-def _load_references() -> ReferenceVolumes:
-    """
-    Load template, CCF volumes, and atlas helper.
-    """
-    template = ants.image_read(
-        "/data/smartspim_lca_template/smartspim_lca_template_25.nii.gz"
-    )
-    ccf = ants.image_read(
-        "/data/allen_mouse_ccf/average_template/average_template_25.nii.gz"
-    )
-    return ReferenceVolumes(template, ccf)
-
-
-def _inspect_image_geometry(reg: RegistrationInfo) -> Geometry:
-    """
-    Read a representative image to compute spacing, origin, and extent.
-
-    Returns
-    -------
-    Geometry
-        Physical extent and origin in millimeters.
-    """
-    img = ants.image_read(str(reg.prep_image_folder / "prep_n4bias.nii.gz"))
-    extrema = np.array(img.shape) * np.array(img.spacing)
-    return Geometry(
-        extrema_mm=extrema, origin_mm=img.origin, exemplar_image=img
     )
 
 
@@ -576,7 +581,7 @@ def _transform_ccf_to_image_space(
 
 
 def _process_manifest_row(
-    row: pd.Series,
+    row: ManifestRow,
     asset_info: AssetInfo,
     hist_stub: sitk.Image,
     hist_stub_buggy: sitk.Image,
@@ -606,19 +611,16 @@ def _process_manifest_row(
     # -- convert to IBL ML/AP/DV using ibl_atlas.ccf2xyz --
     # -- write JSONs under outputs.bregma_xyz and copy into GUI folder --
     # 1) Locate annotation (JSON default)
-    try:
-        ext = "json" if str(row.annotation_format).lower() == "json" else None
-    except Exception:
-        ext = "json"
+    ext = "json" if row.annotation_format == "json" else None
     if ext is None:
         return ProcessResult(
-            str(row.probe_id),
-            str(row.sorted_recording),
+            row.probe_id,
+            row.recording_id,
             False,
             "Only JSON annotations supported",
         )
-
     pattern = f"*/{row.probe_file}.{ext}"
+
     ann_path = next(Path("/data").glob(pattern), None)
     probe_id = str(row.probe_id)
     if ann_path is None:
@@ -719,39 +721,31 @@ def _process_manifest_row(
     xyz_picks_image = {"xyz_picks": xyz_img.tolist()}
     xyz_picks_ccf = {"xyz_picks": bregma_mlapdv_um.tolist()}
 
-    # 7) Write bregma_xyz JSONs (global per-mouse)
-    has_shank = ("probe_shank" in row.keys()) and (
-        not pd.isna(row.probe_shank)
-    )
-    if has_shank:
+    gui_folder = row.gui_folder(outputs)
+    if row.probe_shank is None:
+        img_name = f"{row.probe_id}_image_space.json"
+        ccf_name = f"{row.probe_id}_ccf.json"
+        gui_img = "xyz_picks_image_space.json"
+        gui_ccf = "xyz_picks.json"
+    else:
         shank_id = int(row.probe_shank) + 1
         img_name = f"{row.probe_id}_shank{shank_id}_image_space.json"
         ccf_name = f"{row.probe_id}_shank{shank_id}_ccf.json"
-    else:
-        img_name = f"{row.probe_id}_image_space.json"
-        ccf_name = f"{row.probe_id}_ccf.json"
+        gui_img = f"xyz_picks_shank{shank_id}_image_space.json"
+        gui_ccf = f"xyz_picks_shank{shank_id}.json"
 
+    # 7) Write bregma_xyz JSONs (global per-mouse)
     (outputs.bregma_xyz / img_name).write_text(json.dumps(xyz_picks_image))
     (outputs.bregma_xyz / ccf_name).write_text(json.dumps(xyz_picks_ccf))
 
     # 8) Per-recording GUI artifacts
-    recording_id = str(row.sorted_recording).split("_sorted")[0]
-    gui_folder = (
-        outputs.tracks_root.parent / recording_id / str(row.probe_name)
-    )
     gui_folder.mkdir(parents=True, exist_ok=True)
-    if has_shank:
-        gui_img = f"xyz_picks_shank{shank_id}_image_space.json"
-        gui_ccf = f"xyz_picks_shank{shank_id}.json"
-    else:
-        gui_img = "xyz_picks_image_space.json"
-        gui_ccf = "xyz_picks.json"
     (gui_folder / gui_img).write_text(json.dumps(xyz_picks_image))
     (gui_folder / gui_ccf).write_text(json.dumps(xyz_picks_ccf))
 
     return ProcessResult(
         probe_id=str(row.probe_id),
-        recording_id=recording_id,
+        recording_id=row.recording_id,
         wrote_files=True,
         skipped_reason=None,
     )
@@ -761,7 +755,7 @@ def _process_manifest_row(
 
 
 def _maybe_run_ephys(
-    row: pd.Series, outputs: OutputDirs, processed: set[str]
+    row: ManifestRow, outputs: OutputDirs, processed: set[str]
 ) -> None:
     """
     Run ephys extraction once per unique `sorted_recording`.
@@ -794,20 +788,18 @@ def _maybe_run_ephys(
     processed.add(sorted_rec)
 
     # Derive key paths
-    recording_id = sorted_rec.split("_sorted")[0]
+    recording_id = row.recording_id
     mouse_root = outputs.tracks_root.parent  # /results/<mouseid>
-    results_folder = (
-        mouse_root / recording_id
-    )  # /results/<mouseid>/<recording_id>
+    # /results/<mouseid>/<recording_id>
+    results_folder = mouse_root / recording_id
     results_folder.mkdir(parents=True, exist_ok=True)
 
-    recording_folder = Path("/data") / sorted_rec  # /data/<sorted_recording>
+    # /data/<sorted_recording>
+    recording_folder = Path("/data") / sorted_rec
 
     # Run extraction, optionally with surface finding hint
     try:
-        if ("surface_finding" in row.index) and (
-            not pd.isna(row.surface_finding)
-        ):
+        if row.surface_finding is not None:
             extract_continuous(
                 recording_folder,
                 results_folder,
@@ -895,17 +887,18 @@ def _process_histology_and_ephys(args: Args):
     processed_results: list[ProcessResult] = []
     ibl_atlas = AllenAtlas(25, hist_path=ref_paths.ibl_atlas_histology_path)
     for _, row in manifest_df.iterrows():
+        mr = ManifestRow.from_series(row)
         result = _process_manifest_row(
-            row, asset_info, raw_img_stub, raw_img_stub_buggy, ibl_atlas, out
+            mr, asset_info, raw_img_stub, raw_img_stub_buggy, ibl_atlas, out
         )
         processed_results.append(result)
         if not result.wrote_files:
             logger.warning(
-                f"Did not write files for {row.sorted_recording}: "
+                f"Did not write files for {mr.sorted_recording}: "
                 f"{result.skipped_reason}"
             )
             continue
-        _maybe_run_ephys(row, out, processed_recordings)
+        _maybe_run_ephys(mr, out, processed_recordings)
 
 
 def main() -> None:
