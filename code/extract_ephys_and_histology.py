@@ -63,8 +63,11 @@ Processing overview
 
 """
 
+from __future__ import annotations
+
 import argparse
 import json
+import logging
 import shutil
 import warnings
 from collections.abc import Sequence
@@ -104,7 +107,10 @@ from aind_zarr_utils.zarr import (
     zarr_to_sitk_stub,
 )
 from ants.core import ANTsImage
-from iblatlas import atlas
+from iblatlas.atlas import AllenAtlas
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -129,20 +135,22 @@ class ReferencePaths:
     ccf_25: Path = Path(
         "/data/allen_mouse_ccf/average_template/average_template_25.nii.gz"
     )
-    ccf_labels_25: Path = Path(
-        "/data/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz"
+
+    ccf_labels_lateralized_25: Path = Path(
+        "/data/allen_mouse_ccf_annotations_lateralized_compact/"
+        "ccf_2017_annotation_25_lateralized_compact.nrrd"
     )
-    atlas_histology_path: Path = Path(
-        "/data/spim_template_to_ccf/syn_*.{nii.gz,mat}"
-    )
+    ibl_atlas_histology_path: Path = Path("/data/iblatlas_allenatlas/")
 
 
 @dataclass(frozen=True)
 class ReferenceVolumes:
-    template_25: ants.ANTsImage
     ccf_25: ants.ANTsImage
-    # Object exposing ccf2xyz; keep it typed as Any if needed
-    brain_atlas: atlas.AllenAtlas
+
+    @classmethod
+    def from_paths(cls, paths: ReferencePaths) -> ReferenceVolumes:
+        ccf = ants.image_read(str(paths.ccf_25), pixeltype=None)  # type: ignore
+        return cls(ccf_25=ccf)
 
 
 @dataclass(frozen=True)
@@ -338,11 +346,7 @@ def _load_references() -> ReferenceVolumes:
     ccf = ants.image_read(
         "/data/allen_mouse_ccf/average_template/average_template_25.nii.gz"
     )
-    labels = ants.image_read(
-        "/data/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz"
-    )
-    brain_atlas = atlas.AllenAtlas(25, hist_path="/scratch/")
-    return ReferenceVolumes(template, ccf, labels, brain_atlas)
+    return ReferenceVolumes(template, ccf)
 
 
 def _inspect_image_geometry(reg: RegistrationInfo) -> Geometry:
@@ -526,6 +530,7 @@ def _compress_nrrd(input_path: Path, output_path: Path) -> None:
 def _transform_ccf_to_image_space(
     asset_info: AssetInfo,
     refs: ReferenceVolumes,
+    ref_paths: ReferencePaths,
     raw_img: ANTsImage,
     raw_img_domain_bugged: ANTsImage,
     outputs: OutputDirs,
@@ -545,10 +550,13 @@ def _transform_ccf_to_image_space(
     ants.image_write(ccf_in_hist_img, str(ccf_in_hist_img_path))
     _compress_nrrd(ccf_in_hist_img_path, ccf_in_hist_img_path)
 
-    # Lateralize and compact the labels before transforming
-    ccf_labels_25_img = sitk.ReadImage()
+    # Load the lateralized image
+    ccf_labels_lateralized_25 = ants.image_read(
+        str(ref_paths.ccf_labels_lateralized_25),
+        pixeltype=None,  # type: ignore
+    )
     ccf_labels_in_hist_img = _apply_ccf_pt_tx_buggy_domain_then_fix(
-        refs.ccf_labels_25,
+        ccf_labels_lateralized_25,
         buggy_hist_domain_img=raw_img_domain_bugged,
         hist_domain_img=raw_img,
         asset_info=asset_info,
@@ -572,7 +580,7 @@ def _process_manifest_row(
     asset_info: AssetInfo,
     hist_stub: sitk.Image,
     hist_stub_buggy: sitk.Image,
-    refs: ReferenceVolumes,
+    ibl_atlas: AllenAtlas,
     outputs: OutputDirs,
 ) -> ProcessResult:
     """
@@ -595,7 +603,7 @@ def _process_manifest_row(
     # -- load points -> image coords using geometry.extrema_mm & origin_mm --
     # -- order points, write FCSVs to outputs.spim / outputs.template / outputs.ccf --
     # -- transform to template/CCF via ants.apply_transforms_to_points --
-    # -- convert to IBL ML/AP/DV using refs.brain_atlas.ccf2xyz --
+    # -- convert to IBL ML/AP/DV using ibl_atlas.ccf2xyz --
     # -- write JSONs under outputs.bregma_xyz and copy into GUI folder --
     # 1) Locate annotation (JSON default)
     try:
@@ -700,8 +708,7 @@ def _process_manifest_row(
     )
     bregma_mlapdv_um = (
         # Returns in meters, scale to µm
-        1_000_000.0
-        * refs.brain_atlas.ccf2xyz(ccf_mlapdv_um, ccf_order="mlapdv")
+        1_000_000.0 * ibl_atlas.ccf2xyz(ccf_mlapdv_um, ccf_order="mlapdv")
     )
 
     # Image-space xyz-picks (µm), matching original math
@@ -848,7 +855,8 @@ def _process_histology_and_ephys(args: Args):
     if pd.isna(val):
         raise ValueError("mouseid is missing in first row")
     mouse_id: str = val  # now definitely a str
-    refs = _load_references()
+    ref_paths = ReferencePaths()
+    ref_imgs = ReferenceVolumes.from_paths(ref_paths)
     out = _prepare_result_dirs(mouse_id, paths.results_root)
     asset_info = _find_asset_info(paths)
     node, zarr_metadata = _open_zarr(asset_info.zarr_volumes.registration)
@@ -857,7 +865,9 @@ def _process_histology_and_ephys(args: Args):
     raw_img = _write_registration_channel_outputs(
         asset_info, out, level=level, opened_zarr=(node, zarr_metadata)
     )
-    a_bugged_img = _process_additional_channels_pipeline(asset_info, refs, out)
+    a_bugged_img = _process_additional_channels_pipeline(
+        asset_info, ref_imgs, out
+    )
     if a_bugged_img is None:
         raw_img_domain_bugged = mimic_pipeline_zarr_to_ants(
             asset_info.zarr_volumes.registration,
@@ -868,24 +878,33 @@ def _process_histology_and_ephys(args: Args):
     else:
         raw_img_domain_bugged = a_bugged_img
     _transform_ccf_to_image_space(
-        asset_info, refs, raw_img, raw_img_domain_bugged, out
+        asset_info, ref_imgs, ref_paths, raw_img, raw_img_domain_bugged, out
     )
     raw_img_stub, _ = zarr_to_sitk_stub(
         asset_info.zarr_volumes.registration,
         asset_info.zarr_volumes.metadata,
         opened_zarr=(node, zarr_metadata),
     )
-    raw_img_stub_buggy = mimic_pipeline_zarr_to_anatomical_stub(
+    raw_img_stub_buggy, _ = mimic_pipeline_zarr_to_anatomical_stub(
         asset_info.zarr_volumes.registration,
         asset_info.zarr_volumes.metadata,
         asset_info.zarr_volumes.processing,
         opened_zarr=(node, zarr_metadata),
     )
     processed_recordings: set[str] = set()
+    processed_results: list[ProcessResult] = []
+    ibl_atlas = AllenAtlas(25, hist_path=ref_paths.ibl_atlas_histology_path)
     for _, row in manifest_df.iterrows():
-        _process_manifest_row(
-            row, asset_info, raw_img_stub, raw_img_stub_buggy, refs, out
+        result = _process_manifest_row(
+            row, asset_info, raw_img_stub, raw_img_stub_buggy, ibl_atlas, out
         )
+        processed_results.append(result)
+        if not result.wrote_files:
+            logger.warning(
+                f"Did not write files for {row.sorted_recording}: "
+                f"{result.skipped_reason}"
+            )
+            continue
         _maybe_run_ephys(row, out, processed_recordings)
 
 
