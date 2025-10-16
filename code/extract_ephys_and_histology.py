@@ -69,6 +69,7 @@ import argparse
 import json
 import logging
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,8 @@ from aind_zarr_utils.zarr import (
 from ants.core import ANTsImage
 from iblatlas.atlas import AllenAtlas
 
+from validate_inputs import PipelineValidator
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -116,6 +119,7 @@ class Args:
     neuroglancer: str
     annotation_manifest: str
     skip_ephys: bool = False
+    validate_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -276,6 +280,13 @@ def parse_args():
              "Only process histology and probe tracks.",
     )
 
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Run validation checks only without processing. "
+             "Exits after reporting validation results.",
+    )
+
     args = parser.parse_args()
     return args
 
@@ -289,6 +300,7 @@ def _parse_and_normalize_args() -> Args:
         neuroglancer=a.neuroglancer,
         annotation_manifest=a.annotation_manifest,
         skip_ephys=a.skip_ephys,
+        validate_only=a.validate_only,
     )
 
 
@@ -822,6 +834,32 @@ def _maybe_run_ephys(
 
 def _process_histology_and_ephys(args: Args):
     paths = _resolve_paths(args)
+
+    # Run validation checks
+    logger.info("Running validation checks...")
+    validator = PipelineValidator(args, paths, skip_resource_checks=False)
+    validation_results = validator.validate_all()
+
+    # If --validate-only flag is set, print summary and exit
+    if args.validate_only:
+        validator.print_summary(validation_results)
+        if validator.has_errors(validation_results):
+            logger.error("Validation failed. Please fix the errors above.")
+            sys.exit(1)
+        else:
+            logger.info("Validation passed. Ready to run the pipeline.")
+            sys.exit(0)
+
+    # If validation has errors, fail early
+    if validator.has_errors(validation_results):
+        validator.print_summary(validation_results)
+        logger.error("Validation failed. Please fix the errors above before running the pipeline.")
+        sys.exit(1)
+
+    # Print warnings if any (but continue processing)
+    warnings = [r for r in validation_results if r.severity == "warning"]
+    if warnings:
+        logger.warning(f"Validation passed with {len(warnings)} warning(s). See details above.")
 
     # Keep a manifest snapshot for reproducibility
     shutil.copy(paths.manifest_csv, "/results/manifest.csv")
