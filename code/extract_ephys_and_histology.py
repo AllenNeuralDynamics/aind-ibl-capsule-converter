@@ -69,7 +69,6 @@ import argparse
 import json
 import logging
 import shutil
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -116,6 +115,7 @@ logger = logging.getLogger(__name__)
 class Args:
     neuroglancer: str
     annotation_manifest: str
+    skip_ephys: bool = False
 
 
 @dataclass(frozen=True)
@@ -269,6 +269,13 @@ def parse_args():
         help="Directory containing probe annotations",
     )
 
+    parser.add_argument(
+        "--skip-ephys",
+        action="store_true",
+        help="Skip ephys extraction (extract_continuous and extract_spikes). "
+             "Only process histology and probe tracks.",
+    )
+
     args = parser.parse_args()
     return args
 
@@ -281,6 +288,7 @@ def _parse_and_normalize_args() -> Args:
     return Args(
         neuroglancer=a.neuroglancer,
         annotation_manifest=a.annotation_manifest,
+        skip_ephys=a.skip_ephys,
     )
 
 
@@ -767,12 +775,11 @@ def _maybe_run_ephys(
         extract_continuous(recording_folder, results_folder, [probe_surface_finding=...])
         extract_spikes(recording_folder, results_folder)
 
-    On failure, emits a warning and attempts to copy any "output" artifact
-    from the source recording folder into the results folder for debugging.
+    Any errors from extract_continuous or extract_spikes will propagate to the caller.
 
     Parameters
     ----------
-    row : pd.Series
+    row : ManifestRow
         A manifest row containing `mouseid`, `sorted_recording`, and optional `surface_finding`.
     outputs : OutputDirs
         Dataclass with resolved output directories. We derive the per-recording
@@ -798,38 +805,16 @@ def _maybe_run_ephys(
     recording_folder = Path("/data") / sorted_rec
 
     # Run extraction, optionally with surface finding hint
-    try:
-        if row.surface_finding is not None:
-            extract_continuous(
-                recording_folder,
-                results_folder,
-                probe_surface_finding=Path("/data") / str(row.surface_finding),
-            )
-        else:
-            extract_continuous(recording_folder, results_folder)
-
-        extract_spikes(recording_folder, results_folder)
-
-    except ValueError:
-        warnings.warn(
-            f"Missing spike sorting for {sorted_rec}. Proceeding with histology only.",
-            stacklevel=1,
+    if row.surface_finding is not None:
+        extract_continuous(
+            recording_folder,
+            results_folder,
+            probe_surface_finding=Path("/data") / str(row.surface_finding),
         )
-        # Best-effort copy of any diagnostic artifact named 'output'
-        src = recording_folder / "output"
-        dst = results_folder / "output"
-        try:
-            if src.exists():
-                if src.is_file():
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, dst)
-                else:
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-        except Exception as e:
-            warnings.warn(
-                f"Failed to copy diagnostic artifact from {src} -> {dst}: {e}",
-                stacklevel=1,
-            )
+    else:
+        extract_continuous(recording_folder, results_folder)
+
+    extract_spikes(recording_folder, results_folder)
 
 
 # ---- Orchestrator (new short main) ------------------------------------------
@@ -886,6 +871,10 @@ def _process_histology_and_ephys(args: Args):
     processed_recordings: set[str] = set()
     processed_results: list[ProcessResult] = []
     ibl_atlas = AllenAtlas(25, hist_path=ref_paths.ibl_atlas_histology_path)
+
+    if args.skip_ephys:
+        logger.info("Ephys processing disabled via --skip-ephys flag")
+
     for _, row in manifest_df.iterrows():
         mr = ManifestRow.from_series(row)
         result = _process_manifest_row(
@@ -898,7 +887,9 @@ def _process_histology_and_ephys(args: Args):
                 f"{result.skipped_reason}"
             )
             continue
-        _maybe_run_ephys(mr, out, processed_recordings)
+        # Only run ephys processing if not skipped
+        if not args.skip_ephys:
+            _maybe_run_ephys(mr, out, processed_recordings)
 
 
 def main() -> None:
