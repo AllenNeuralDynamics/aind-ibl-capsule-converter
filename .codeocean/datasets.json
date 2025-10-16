@@ -2,12 +2,12 @@
 	"version": 1,
 	"attached_datasets": [
 		{
-			"id": "30bf0bcc-6467-4b49-a177-a1a1424ff1f6",
-			"mount": "smartspim_lca_template"
+			"id": "1db89ba7-3ac6-4442-8d3b-5a8389be9b90",
+			"mount": "ecephys_776259_2025-04-09_17-25-12_sorted_2025-07-02_13-42-36"
 		},
 		{
-			"id": "37534ad8-cc73-4f96-a5ae-1aab5033fe57",
-			"mount": "ecephys_776259_2025-04-09_17-25-12_nwb_redo"
+			"id": "30bf0bcc-6467-4b49-a177-a1a1424ff1f6",
+			"mount": "smartspim_lca_template"
 		},
 		{
 			"id": "60fe3cc1-2c31-4435-a375-620be2f9579b",
