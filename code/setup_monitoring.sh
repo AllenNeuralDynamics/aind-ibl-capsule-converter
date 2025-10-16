@@ -22,6 +22,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Get script directory for finding io_monitor.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -106,7 +109,14 @@ fi
 # Create session with first window
 tmux new-session -d -s $SESSION_NAME -n "monitoring"
 
-# Pane 0: Pipeline log (top-left)
+# Verify PID still exists before setting up panes
+if ! kill -0 $PID 2>/dev/null; then
+    log_error "Process $PID terminated before setup completed"
+    tmux kill-session -t $SESSION_NAME 2>/dev/null
+    exit 1
+fi
+
+# Pane 0: Pipeline log (top-left) - this is the initial pane
 tmux send-keys -t $SESSION_NAME:0.0 "clear" C-m
 if [ -f "$LOG_FILE" ]; then
     tmux send-keys -t $SESSION_NAME:0.0 "tail -f $LOG_FILE | grep --line-buffered TIMING" C-m
@@ -114,22 +124,33 @@ else
     tmux send-keys -t $SESSION_NAME:0.0 "echo 'Waiting for pipeline log...'; echo 'Start pipeline with: python run_profiled.py 2>&1 | tee /results/pipeline.log'; sleep infinity" C-m
 fi
 
-# Split horizontally (creates pane 1: top-right)
-tmux split-window -h -t $SESSION_NAME:0
+# Split horizontally to create right column (pane 1: top-right)
+tmux split-window -h -t $SESSION_NAME:0.0
+
+# Now split the LEFT pane (pane 0) vertically to create bottom-left (pane 2)
+tmux select-pane -t $SESSION_NAME:0.0
+tmux split-window -v -t $SESSION_NAME:0.0
+
+# Now split the RIGHT pane (currently pane 1) vertically to create bottom-right (pane 3)
+# After the previous split, pane 1 is still the top-right
+tmux select-pane -t $SESSION_NAME:0.1
+tmux split-window -v -t $SESSION_NAME:0.1
+
+# At this point we have a 2x2 grid:
+# Pane 0: top-left (pipeline log)
+# Pane 1: top-right (will be IO stats)
+# Pane 2: bottom-left (will be CPU/Memory)
+# Pane 3: bottom-right (will be Disk IO)
 
 # Pane 1: Process IO stats (top-right)
 tmux send-keys -t $SESSION_NAME:0.1 "clear" C-m
-if [ -f "./io_monitor.sh" ]; then
-    tmux send-keys -t $SESSION_NAME:0.1 "./io_monitor.sh $PID" C-m
+if [ -f "$SCRIPT_DIR/io_monitor.sh" ]; then
+    tmux send-keys -t $SESSION_NAME:0.1 "$SCRIPT_DIR/io_monitor.sh $PID" C-m
 elif command -v pidstat &> /dev/null; then
-    tmux send-keys -t $SESSION_NAME:0.1 "watch -n 2 'pidstat -d -r -u -p $PID 1 1 | tail -n 5'" C-m
+    tmux send-keys -t $SESSION_NAME:0.1 "watch -n 2 'pidstat -d -r -u -p $PID 1 1 2>&1 | tail -n 5'" C-m
 else
-    tmux send-keys -t $SESSION_NAME:0.1 "watch -n 2 'ps -p $PID -o pid,pcpu,pmem,vsz,rss,etime,comm'" C-m
+    tmux send-keys -t $SESSION_NAME:0.1 "echo 'pidstat not found. Install with: apt install sysstat'; echo ''; watch -n 2 'ps -p $PID -o pid,pcpu,pmem,vsz,rss,etime,comm 2>&1'" C-m
 fi
-
-# Select pane 0 and split vertically (creates pane 2: bottom-left)
-tmux select-pane -t $SESSION_NAME:0.0
-tmux split-window -v -t $SESSION_NAME:0
 
 # Pane 2: CPU/Memory (bottom-left)
 tmux send-keys -t $SESSION_NAME:0.2 "clear" C-m
@@ -139,18 +160,14 @@ else
     tmux send-keys -t $SESSION_NAME:0.2 "top -p $PID" C-m
 fi
 
-# Select pane 1 and split vertically (creates pane 3: bottom-right)
-tmux select-pane -t $SESSION_NAME:0.1
-tmux split-window -v -t $SESSION_NAME:0
-
 # Pane 3: Disk IO (bottom-right)
 tmux send-keys -t $SESSION_NAME:0.3 "clear" C-m
 if command -v iostat &> /dev/null; then
-    tmux send-keys -t $SESSION_NAME:0.3 "watch -n 2 'iostat -x 1 1 | grep -E \"Device|sd|nvme\" | head -n 10'" C-m
+    tmux send-keys -t $SESSION_NAME:0.3 "watch -n 2 'iostat -x 1 1 2>&1 | grep -E \"Device|sd|nvme\" | head -n 10'" C-m
 elif command -v vmstat &> /dev/null; then
     tmux send-keys -t $SESSION_NAME:0.3 "vmstat 2" C-m
 else
-    tmux send-keys -t $SESSION_NAME:0.3 "watch -n 2 'df -h'" C-m
+    tmux send-keys -t $SESSION_NAME:0.3 "echo 'iostat not found. Install with: apt install sysstat'; echo ''; watch -n 2 'df -h'" C-m
 fi
 
 # Set pane titles
