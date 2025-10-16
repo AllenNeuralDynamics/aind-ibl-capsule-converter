@@ -31,8 +31,25 @@ DO_UPDATE=0
 PASSTHRU_ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    --update_packages_from_source=1) DO_UPDATE=1 ;;
-    *) PASSTHRU_ARGS+=("$arg") ;;
+      # bare flag or empty value → treat as "on"
+    --update_packages_from_source|--update_packages_from_source=)
+      DO_UPDATE=1
+      ;;
+    # any value -> strip from passthru; only truthy values enable
+    --update_packages_from_source=*)
+      val=${arg#*=}
+      shopt -s nocasematch
+      if [[ "$val" == 1 || "$val" == true || "$val" == yes ]]; then
+        DO_UPDATE=1
+      else
+        DO_UPDATE=0
+      fi
+      shopt -u nocasematch
+      ;;
+    # everything else passes through
+    *)
+      PASSTHRU_ARGS+=("$arg")
+      ;;
   esac
 done
 
