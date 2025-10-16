@@ -62,7 +62,7 @@ if [ $# -eq 1 ]; then
     PID=$1
 else
     log_info "Auto-detecting pipeline process..."
-    PID=$(pgrep -f "extract_ephys_and_histology\|run_profiled" | head -n 1 || echo "")
+    PID=$(pgrep -f "extract_ephys_and_histology|run_profiled" | head -n 1 || echo "")
 
     if [ -z "$PID" ]; then
         log_error "No pipeline process found"
