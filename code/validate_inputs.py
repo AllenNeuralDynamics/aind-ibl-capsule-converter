@@ -20,27 +20,20 @@ Usage:
 
 from __future__ import annotations
 
-import glob
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 # Import the data structures from the main pipeline
-try:
-    from extract_ephys_and_histology import (
-        Args,
-        InputPaths,
-        ReferencePaths,
-        ManifestRow,
-    )
-except ImportError:
-    # For standalone testing
-    pass
+from pipeline_types import (
+    Args,
+    InputPaths,
+    ManifestRow,
+    ReferencePaths,
+)
 
 
 @dataclass(frozen=True)
@@ -61,6 +54,7 @@ class ValidationResult:
     severity : str
         Severity level: "error" (must fix), "warning" (should fix), or "info" (informational).
     """
+
     passed: bool
     category: str
     item: str
@@ -428,7 +422,9 @@ class PipelineValidator:
 
             # Try to locate asset path
             from aind_s3_cache.uri_utils import as_pathlike
-            from aind_zarr_utils.pipeline_transformed import _asset_from_zarr_pathlike
+            from aind_zarr_utils.pipeline_transformed import (
+                _asset_from_zarr_pathlike,
+            )
 
             a_zarr_uri = next(iter(sources.values()), None)
             if a_zarr_uri:
@@ -493,7 +489,9 @@ class PipelineValidator:
                         )
 
                         # Look for moved_ls_to_ccf.nii.gz in subdirectories
-                        ccf_files = list(reg_dir.glob("*/moved_ls_to_ccf.nii.gz"))
+                        ccf_files = list(
+                            reg_dir.glob("*/moved_ls_to_ccf.nii.gz")
+                        )
                         if ccf_files:
                             self._add_result(
                                 True,
@@ -511,8 +509,12 @@ class PipelineValidator:
                             )
 
                         # Check for transform files
-                        affine_files = list(reg_dir.glob("*/*_0GenericAffine.mat"))
-                        warp_files = list(reg_dir.glob("*/*_1InverseWarp.nii.gz"))
+                        affine_files = list(
+                            reg_dir.glob("*/*_0GenericAffine.mat")
+                        )
+                        warp_files = list(
+                            reg_dir.glob("*/*_1InverseWarp.nii.gz")
+                        )
 
                         if affine_files and warp_files:
                             self._add_result(
@@ -724,7 +726,7 @@ class PipelineValidator:
 
         # Check available RAM
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo") as f:
                 meminfo = f.read()
             for line in meminfo.split("\n"):
                 if line.startswith("MemAvailable:"):
@@ -804,7 +806,9 @@ class PipelineValidator:
 
     # ---- Output Methods ----
 
-    def print_summary(self, results: list[ValidationResult] | None = None) -> None:
+    def print_summary(
+        self, results: list[ValidationResult] | None = None
+    ) -> None:
         """
         Print a formatted summary of validation results.
 
@@ -828,9 +832,9 @@ class PipelineValidator:
         warnings = [r for r in results if r.severity == "warning"]
 
         # Print header
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("VALIDATION SUMMARY")
-        print("="*80)
+        print("=" * 80)
 
         # Print each category
         for category, cat_results in by_category.items():
@@ -854,7 +858,7 @@ class PipelineValidator:
                     print(f"    {line}")
 
         # Print summary
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         if errors:
             print(f"RESULT: FAILED with {len(errors)} error(s)")
             if warnings:
@@ -862,13 +866,17 @@ class PipelineValidator:
             print("\nPlease fix the errors above before running the pipeline.")
         elif warnings:
             print(f"RESULT: PASSED with {len(warnings)} warning(s)")
-            print("\nYou can proceed, but consider addressing the warnings above.")
+            print(
+                "\nYou can proceed, but consider addressing the warnings above."
+            )
         else:
             print("RESULT: PASSED")
             print("\nAll checks passed! Ready to run the pipeline.")
-        print("="*80 + "\n")
+        print("=" * 80 + "\n")
 
-    def has_errors(self, results: list[ValidationResult] | None = None) -> bool:
+    def has_errors(
+        self, results: list[ValidationResult] | None = None
+    ) -> bool:
         """
         Check if there are any error-level failures.
 
