@@ -28,12 +28,17 @@ from dataclasses import dataclass
 import pandas as pd
 
 # Import the data structures from the main pipeline
-from pipeline_types import (
+from ibl_preprocess_types import (
     Args,
     InputPaths,
     ManifestRow,
     ReferencePaths,
 )
+
+
+def _norm_shank_series(s: pd.Series) -> pd.Series:
+    # Treat NaN/None as a sentinel so duplicates behave predictably
+    return s.fillna(-1).astype(int)
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,38 @@ class PipelineValidator:
                 message=message,
                 severity=severity,
             )
+        )
+
+    def _add_unique_violation_results(
+        self, df: pd.DataFrame, subset: list[str], label: str, category: str
+    ) -> None:
+        dups_mask = df.duplicated(subset=subset, keep=False)
+        if not dups_mask.any():
+            self._add_result(
+                True,
+                category,
+                f"{label}_uniqueness",
+                f"Unique by {tuple(subset)}",
+                severity="info",
+            )
+            return
+
+        # Summarize offenders (key + count), show up to a few
+        offenders = (
+            df.loc[dups_mask, subset]
+            .value_counts()
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        # Make a compact preview for the message
+        top_preview = offenders.head(10).to_string(index=False)
+        self._add_result(
+            False,
+            category,
+            f"{label}_uniqueness",
+            "Found non-unique keys for "
+            f"{label} (expected unique by {tuple(subset)}).\n"
+            f"Top offenders:\n{top_preview}",
         )
 
     # ---- Category 1: CLI Arguments ----
@@ -295,6 +332,71 @@ class PipelineValidator:
                             f"Column '{col}' has {null_count} null/empty values",
                             severity="warning",
                         )
+
+        # -------------------------------
+        # Uniqueness constraints (triplets)
+        # -------------------------------
+        # Derive recording_id if missing
+        if (
+            "recording_id" not in df.columns
+            and "sorted_recording" in df.columns
+        ):
+            df = df.assign(
+                recording_id=df["sorted_recording"]
+                .astype(str)
+                .str.split("_sorted", n=1, expand=True)[0]
+            )
+
+        # Normalize shank for consistent keys
+        shank_col = "probe_shank"
+        if shank_col not in df.columns:
+            # if absent, synthesize a column of Nones so the check still runs
+            df[shank_col] = None
+        df["_probe_shank_norm"] = _norm_shank_series(df[shank_col])
+
+        # 1) Per-mouse bregma_xyz must be unique by (mouseid, probe_id, probe_shank)
+        if {"mouseid", "probe_id"}.issubset(df.columns):
+            self._add_unique_violation_results(
+                df,
+                subset=["mouseid", "probe_id", "_probe_shank_norm"],
+                label="bregma_xyz (mouseid, probe_id, probe_shank)",
+                category=category,
+            )
+
+        # 2) Per-recording GUI must be unique by (recording_id, probe_name, probe_shank)
+        if {"recording_id", "probe_name"}.issubset(df.columns):
+            self._add_unique_violation_results(
+                df,
+                subset=["recording_id", "probe_name", "_probe_shank_norm"],
+                label="GUI (recording_id, probe_name, probe_shank)",
+                category=category,
+            )
+
+        # 3) Informational: multiple rows per recording_id (ephys single-flight handles this)
+        if "recording_id" in df.columns:
+            dmask = df.duplicated(subset=["recording_id"], keep=False)
+            if dmask.any():
+                counts = (
+                    df.loc[dmask, ["recording_id"]]
+                    .value_counts()
+                    .reset_index(name="count")
+                    .sort_values("count", ascending=False)
+                    .head(10)
+                    .to_string(index=False)
+                )
+                self._add_result(
+                    True,
+                    category,
+                    "recording_id_multiplicity",
+                    "Multiple rows reference the same recording_id "
+                    "(this is allowed; ephys is deduped at run time).\n"
+                    f"Top counts:\n{counts}",
+                    severity="warning",
+                )
+
+        # Cleanup temp column
+        if "_probe_shank_norm" in df.columns:
+            df.drop(columns=["_probe_shank_norm"], inplace=True)
 
     # ---- Category 3: Reference Data ----
 
