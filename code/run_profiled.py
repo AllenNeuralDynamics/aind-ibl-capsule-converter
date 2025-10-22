@@ -31,13 +31,14 @@ import performance_profiler as prof
 # Configure logging to see timing output
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 logger = logging.getLogger(__name__)
 
 # Import the module we want to patch
 import extract_ephys_and_histology as pipeline
+
 
 # Register cleanup to save results at exit
 def save_results():
@@ -60,38 +61,44 @@ def patch_module():
     """Wrap key functions in the pipeline module with timing instrumentation."""
 
     # Stage 1: Path resolution (should be fast)
-    pipeline._resolve_paths = prof.timing_decorator("1.resolve_paths")(
-        pipeline._resolve_paths
+    pipeline.resolve_paths = prof.timing_decorator("1.resolve_paths")(
+        pipeline.resolve_paths
     )
 
     # Stage 2: Asset discovery (may be slow - S3 access)
-    pipeline._find_asset_info = prof.timing_decorator("2.find_asset_info")(
-        pipeline._find_asset_info
+    pipeline.find_asset_info = prof.timing_decorator("2.find_asset_info")(
+        pipeline.find_asset_info
     )
 
     # Stage 3: Result directory creation (should be fast)
-    pipeline._prepare_result_dirs = prof.timing_decorator("3.prepare_result_dirs")(
-        pipeline._prepare_result_dirs
-    )
+    pipeline.prepare_result_dirs = prof.timing_decorator(
+        "3.prepare_result_dirs"
+    )(pipeline.prepare_result_dirs)
 
     # Stage 4: Registration channel outputs (likely slow - Zarr read + write)
     orig_write_reg = pipeline._write_registration_channel_outputs
+
     @functools.wraps(orig_write_reg)
     def write_reg_timed(*args, **kwargs):
-        with prof.timing_context("4.write_registration_channel",
-                                  stage="registration"):
+        with prof.timing_context(
+            "4.write_registration_channel", stage="registration"
+        ):
             return orig_write_reg(*args, **kwargs)
+
     pipeline._write_registration_channel_outputs = write_reg_timed
 
     # Stage 5: Additional channels processing (likely very slow - multiple channels)
     orig_add_channels = pipeline._process_additional_channels_pipeline
+
     @functools.wraps(orig_add_channels)
     def add_channels_timed(*args, **kwargs):
         asset_info = args[0]
         n_channels = len(asset_info.zarr_volumes.additional)
-        with prof.timing_context("5.process_additional_channels",
-                                  num_channels=n_channels):
+        with prof.timing_context(
+            "5.process_additional_channels", num_channels=n_channels
+        ):
             return orig_add_channels(*args, **kwargs)
+
     pipeline._process_additional_channels_pipeline = add_channels_timed
 
     # Stage 6: CCF to image space transform (likely slow - ANTs)
@@ -101,55 +108,72 @@ def patch_module():
 
     # Stage 7: Per-probe processing
     orig_process_row = pipeline._process_manifest_row
+
     @functools.wraps(orig_process_row)
     def process_row_timed(row, *args, **kwargs):
         probe_id = row.probe_id
-        with prof.timing_context(f"7.process_probe", probe_id=probe_id):
+        with prof.timing_context("7.process_probe", probe_id=probe_id):
             return orig_process_row(row, *args, **kwargs)
+
     pipeline._process_manifest_row = process_row_timed
 
     # Stage 8: Ephys extraction (very slow when present)
     orig_ephys = pipeline._maybe_run_ephys
+
     @functools.wraps(orig_ephys)
     def ephys_timed(row, *args, **kwargs):
         recording_id = row.recording_id
-        with prof.timing_context("8.ephys_extraction", recording_id=recording_id):
+        with prof.timing_context(
+            "8.ephys_extraction", recording_id=recording_id
+        ):
             return orig_ephys(row, *args, **kwargs)
+
     pipeline._maybe_run_ephys = ephys_timed
 
     # Wrap reference volume loading (may be slow - first time loads CCF)
     orig_from_paths = pipeline.ReferenceVolumes.from_paths
+
     @classmethod
     def from_paths_timed(cls, paths):
         with prof.timing_context("ref.load_ccf_volumes"):
             return orig_from_paths(paths)
+
     pipeline.ReferenceVolumes.from_paths = from_paths_timed
 
     # Wrap AllenAtlas initialization (may be slow)
     from iblatlas.atlas import AllenAtlas
+
     orig_atlas_init = AllenAtlas.__init__
+
     def atlas_init_timed(self, res_um=25, **kwargs):
         with prof.timing_context("ref.init_allen_atlas", resolution_um=res_um):
             return orig_atlas_init(self, res_um=res_um, **kwargs)
+
     AllenAtlas.__init__ = atlas_init_timed
 
     # Wrap ANTs operations if we want fine-grained timing
     try:
         import ants
+
         orig_apply_transforms = ants.apply_transforms
 
         def apply_transforms_timed(fixed, moving, transformlist, **kwargs):
             with prof.timing_context("ants.apply_transforms"):
-                return orig_apply_transforms(fixed, moving, transformlist, **kwargs)
+                return orig_apply_transforms(
+                    fixed, moving, transformlist, **kwargs
+                )
 
         ants.apply_transforms = apply_transforms_timed
 
         orig_image_write = ants.image_write
+
         def image_write_timed(image, filename, **kwargs):
             size_mb = image.numpy().nbytes / (1024 * 1024)
-            with prof.timing_context("ants.image_write",
-                                      file=Path(filename).name,
-                                      size_mb=f"{size_mb:.1f}"):
+            with prof.timing_context(
+                "ants.image_write",
+                file=Path(filename).name,
+                size_mb=f"{size_mb:.1f}",
+            ):
                 return orig_image_write(image, filename, **kwargs)
 
         ants.image_write = image_write_timed
@@ -160,16 +184,22 @@ def patch_module():
     # Wrap zarr operations
     try:
         from aind_zarr_utils.zarr import zarr_to_ants
+
         orig_zarr_to_ants = zarr_to_ants
 
         def zarr_to_ants_timed(zarr_path, *args, **kwargs):
             path_str = str(zarr_path)
-            channel = Path(path_str).stem if isinstance(zarr_path, (str, Path)) else "unknown"
+            channel = (
+                Path(path_str).stem
+                if isinstance(zarr_path, (str, Path))
+                else "unknown"
+            )
             with prof.timing_context("zarr.zarr_to_ants", channel=channel):
                 return orig_zarr_to_ants(zarr_path, *args, **kwargs)
 
         # Monkey-patch the module
         import aind_zarr_utils.zarr
+
         aind_zarr_utils.zarr.zarr_to_ants = zarr_to_ants_timed
 
     except ImportError:

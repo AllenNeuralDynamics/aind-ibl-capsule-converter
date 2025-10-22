@@ -38,12 +38,12 @@ dependencies = [
     "zarr>=2.10.0",
     "antspyx>=0.3.0",
     "iblatlas>=0.4.0",
-    "aind-anatomical-utils>=0.2,<0.4",
+    "aind-anatomical-utils>=0.4,<0.5",
     "aind-mri-utils>=0.1.0",
     "aind-ephys-ibl-gui-conversion @ git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@main",
     "aind-registration-utils>=0.4,<0.5",
     "aind-s3-cache>=0.1",
-    "aind-zarr-utils>=0.8",
+    "aind-zarr-utils>=0.11.2",
 ]
 
 [dependency-groups]

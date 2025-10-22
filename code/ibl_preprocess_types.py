@@ -1,15 +1,16 @@
-"""
-Dataclasses for passing around pipeline parameters and paths.
-"""
-
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import ants
 import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class Args:
     annotation_manifest: str
     skip_ephys: bool = False
     validate_only: bool = False
+    run_async: bool = True
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,14 @@ class ReferenceVolumes:
     @classmethod
     def from_paths(cls, paths: ReferencePaths) -> ReferenceVolumes:
         ccf = ants.image_read(str(paths.ccf_25), pixeltype=None)  # type: ignore
+        return cls(ccf_25=ccf)
+
+    @classmethod
+    async def from_paths_async(cls, paths: ReferencePaths) -> ReferenceVolumes:
+        # async version for use in async contexts
+        ccf = await asyncio.to_thread(
+            ants.image_read, str(paths.ccf_25), pixeltype=None
+        )  # type: ignore
         return cls(ccf_25=ccf)
 
 

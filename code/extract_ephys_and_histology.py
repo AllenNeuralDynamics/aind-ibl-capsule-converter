@@ -70,16 +70,13 @@ Processing overview
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
 import ants
-import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 from aind_anatomical_utils.coordinate_systems import convert_coordinate_system
@@ -92,38 +89,36 @@ from aind_ephys_ibl_gui_conversion.histology import (
 )
 from aind_registration_utils.ants import apply_ants_transforms_to_point_arr
 from aind_s3_cache.json_utils import get_json
-from aind_s3_cache.uri_utils import as_pathlike
 from aind_zarr_utils.neuroglancer import (
-    get_image_sources,
     neuroglancer_annotations_to_anatomical,
 )
 from aind_zarr_utils.pipeline_transformed import (
-    _asset_from_zarr_pathlike,
-    alignment_zarr_uri_and_metadata_from_zarr_or_asset_pathlike,
-    mimic_pipeline_zarr_to_anatomical_stub,
-    mimic_pipeline_zarr_to_ants,
-    pipeline_transforms_local_paths,
+    base_and_pipeline_anatomical_stub,
+    base_and_pipeline_zarr_to_sitk,
 )
 from aind_zarr_utils.zarr import (
     _open_zarr,
-    zarr_to_ants,
-    zarr_to_sitk_stub,
+    zarr_to_sitk,
 )
 from ants.core import ANTsImage
-from iblatlas.atlas import AllenAtlas
-from pipeline_types import (
+from extract_ephys_hist_core import (
+    determine_desired_level,
+    find_asset_info,
+    handle_validation,
+    parse_and_normalize_args,
+    prepare_result_dirs,
+    resolve_paths,
+)
+from ibl_preprocess_types import (
     Args,
     AssetInfo,
-    InputPaths,
     ManifestRow,
     OutputDirs,
-    PipelineRegistrationInfo,
     ProcessResult,
     ReferencePaths,
     ReferenceVolumes,
-    ZarrPaths,
 )
-from validate_inputs import PipelineValidator
+from iblatlas.atlas import AllenAtlas
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -132,192 +127,17 @@ logger = logging.getLogger(__name__)
 # ---- Stage 1: args and input resolution -------------------------------------
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--manifest",
-        dest="annotation_manifest",
-        default="729293/Manifest_Day1_2_729293 1.csv",
-        help="Probe Annotations",
-    )
-
-    parser.add_argument(
-        "--neuroglancer",
-        dest="neuroglancer",
-        default="Probes_561_729293_Day1and2.json",
-        help="Directory containing probe annotations",
-    )
-
-    parser.add_argument(
-        "--skip-ephys",
-        action="store_true",
-        help="Skip ephys extraction (extract_continuous and extract_spikes). "
-        "Only process histology and probe tracks.",
-    )
-
-    parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help="Run validation checks only without processing. "
-        "Exits after reporting validation results.",
-    )
-
-    args = parser.parse_args()
-    return args
-
-
-def _parse_and_normalize_args() -> Args:
+def _convert_img_to_sra_and_write(img: sitk.Image, output_path: Path) -> None:
     """
-    Parse CLI args
+    Convert an image to SRA orientation and write as compressed NRRD.
     """
-    a = parse_args()
-    return Args(
-        neuroglancer=a.neuroglancer,
-        annotation_manifest=a.annotation_manifest,
-        skip_ephys=a.skip_ephys,
-        validate_only=a.validate_only,
-    )
+    img_sra = sitk.DICOMOrient(img, "SRA")
+    sitk.WriteImage(img_sra, str(output_path), useCompression=True)
 
 
-def _resolve_paths(args: Args) -> InputPaths:
-    """
-    Resolve inputs to absolute /data and /results paths.
-
-    Returns
-    -------
-    InputPaths
-        Object with resolved neuroglancer file, manifest CSV, roots.
-    """
-    data_root = Path("/data")
-    results_root = Path("/results")
-
-    def under_data(p: str | Path, data_root: Path = Path("/data")) -> Path:
-        pth = Path(p).expanduser()
-        return pth if pth.is_absolute() else (data_root / pth)
-
-    return InputPaths(
-        neuroglancer_file=under_data(args.neuroglancer),
-        manifest_csv=under_data(args.annotation_manifest),
-        data_root=data_root,
-        results_root=results_root,
-    )
-
-
-def _find_asset_info(paths: InputPaths) -> AssetInfo:
-    ng_data = get_json(str(paths.neuroglancer_file))
-    sources = get_image_sources(ng_data)
-    a_zarr_uri = next(iter(sources.values()), None)
-    if a_zarr_uri is None:
-        raise ValueError("No image sources found in neuroglancer data")
-    _, _, a_zarr_pathlike = as_pathlike(a_zarr_uri)
-    asset_pathlike = _asset_from_zarr_pathlike(a_zarr_pathlike)
-    asset_path = paths.data_root / asset_pathlike
-    if not asset_path.exists():
-        raise FileNotFoundError(f"Asset path not found: {asset_path}")
-    asset_path_str = str(asset_path)
-    zarr_path = asset_path / "image_tile_fusing" / "OMEZarr"
-    image_channel_zarrs = [
-        p for p in zarr_path.iterdir() if p.is_dir() and p.suffix == ".zarr"
-    ]
-    alignment_zarr_uri, metadata, processing_data = (
-        alignment_zarr_uri_and_metadata_from_zarr_or_asset_pathlike(
-            asset_uri=asset_path_str
-        )
-    )
-    other_channels = list(
-        {p.as_posix() for p in image_channel_zarrs} - {alignment_zarr_uri}
-    )
-    zarr_paths = ZarrPaths(
-        registration=alignment_zarr_uri,
-        additional=other_channels,
-        metadata=metadata,
-        processing=processing_data,
-    )
-
-    pt_tx_str, pt_tx_inverted, img_tx_str, img_tx_inverted = (
-        pipeline_transforms_local_paths(
-            alignment_zarr_uri,
-            processing_data,
-            anonymous=True,
-        )
-    )
-    pipeline_reg_info = PipelineRegistrationInfo(
-        pt_tx_str=pt_tx_str,
-        pt_tx_inverted=pt_tx_inverted,
-        img_tx_str=img_tx_str,
-        img_tx_inverted=img_tx_inverted,
-    )
-
-    alignment_zarr_path = Path(alignment_zarr_uri)
-    registration_channel_stem = alignment_zarr_path.stem
-    registration_dir_path = (
-        asset_path / "image_atlas_alignment" / f"{registration_channel_stem}"
-    )
-    registration_in_ccf_precomputed = (
-        registration_dir_path / "moved_ls_to_ccf.nii.gz"
-    )
-    return AssetInfo(
-        asset_path=asset_path,
-        zarr_volumes=zarr_paths,
-        pipeline_registration_chains=pipeline_reg_info,
-        registration_dir_path=registration_dir_path,
-        registration_in_ccf_precomputed=registration_in_ccf_precomputed,
-    )
-
-
-# ---- Stage 3: outputs --------------------------------------------------------
-
-
-def _prepare_result_dirs(mouse_id: str, results_root: Path) -> OutputDirs:
-    """
-    Create directory structure for histology and track outputs.
-    """
-    histology_ccf = results_root / mouse_id / "ccf_space_histology"
-    histology_img = results_root / mouse_id / "image_space_histology"
-    tracks_root = results_root / mouse_id / "track_data"
-    spim = tracks_root / "spim"
-    template = tracks_root / "template"
-    ccf = tracks_root / "ccf"
-    bregma = tracks_root / "bregma_xyz"
-    for d in (histology_ccf, histology_img, spim, template, ccf, bregma):
-        d.mkdir(parents=True, exist_ok=True)
-    return OutputDirs(
-        histology_ccf, histology_img, tracks_root, spim, template, ccf, bregma
-    )
-
-
-# ---- Stage 4–6: batch operations (no per-row state) -------------------------
-
-
-def _determine_desired_level(
-    zarr_metadata, desired_voxel_size_um: float = 25.0
-) -> int:
-    # Get the minimum voxel spatial dimension for each multiscale level
-    scales = np.array(
-        [
-            np.array(x[0]["scale"][2:]).min()
-            for x in zarr_metadata["coordinateTransformations"]
-        ]
-    )
-    # Find the highest-resolution level not exceeding desired_voxel_size_um
-    level = np.maximum(
-        np.searchsorted(scales, desired_voxel_size_um, side="right") - 1,
-        0,
-    )
-    return level
-
-
-def _write_registration_channel_outputs(
-    asset_info: AssetInfo,
-    outputs: OutputDirs,
-    *,
-    level: int = 3,
-    opened_zarr: tuple[Any, dict[str, Any]] | None = None,
-) -> ANTsImage:
-    """
-    Write registration-channel outputs to CCF and image space.
-    """
+def _copy_registration_channel_ccf_sra(
+    asset_info: AssetInfo, outputs: OutputDirs
+) -> None:
     if not asset_info.registration_in_ccf_precomputed.exists():
         raise FileNotFoundError(
             "Precomputed registration in CCF not found: "
@@ -325,35 +145,53 @@ def _write_registration_channel_outputs(
         )
     # Save the precomputed CCF-space image as a nrrd
     ccf_img = sitk.ReadImage(str(asset_info.registration_in_ccf_precomputed))
-    sitk.WriteImage(
-        ccf_img,
-        str(outputs.histology_ccf / "histology_registration.nrrd"),
-        useCompression=True,
-    )
+    img_in_ccf_dst = outputs.histology_ccf / "histology_registration.nrrd"
+    _convert_img_to_sra_and_write(ccf_img, img_in_ccf_dst)
+
+
+def _write_registration_channel_images(
+    asset_info: AssetInfo,
+    outputs: OutputDirs,
+    *,
+    level: int = 3,
+    opened_zarr: tuple[Any, dict[str, Any]] | None = None,
+) -> tuple[Path, Path]:
+    """
+    Write registration-channel outputs to CCF and image space.
+    """
     reg_zarr = asset_info.zarr_volumes.registration
     if opened_zarr is None:
         zarr_node, zarr_metadata = _open_zarr(reg_zarr)
     else:
         zarr_node, zarr_metadata = opened_zarr
     # Get the minimum voxel spatial dimension for each multiscale level
-    raw_img = zarr_to_ants(
+
+    metadata = asset_info.zarr_volumes.metadata
+    processing = asset_info.zarr_volumes.processing
+    raw_img, pipeline_raw_img = base_and_pipeline_zarr_to_sitk(
         reg_zarr,
-        asset_info.zarr_volumes.metadata,
+        metadata,
+        processing,
         level=level,
         opened_zarr=(zarr_node, zarr_metadata),
     )
-    # Copy the preprocessed image (image space)
-    raw_img_dst = outputs.histology_img / "histology_registration.nii.gz"
-    ants.image_write(raw_img, str(raw_img_dst))
-    return raw_img
+    raw_img_dst = outputs.histology_img / "histology_registration.nrrd"
+    _convert_img_to_sra_and_write(raw_img, raw_img_dst)
+    del raw_img
+    bugged_img_dst = (
+        outputs.histology_img / "histology_registration_pipeline.nrrd"
+    )
+    _convert_img_to_sra_and_write(pipeline_raw_img, bugged_img_dst)
+    return raw_img_dst, bugged_img_dst
 
 
 def _process_additional_channels_pipeline(
+    pipeline_histology_space_img: ANTsImage,
     asset_info: AssetInfo,
     refs: ReferenceVolumes,
     outputs: OutputDirs,
     level: int = 3,
-) -> ANTsImage | None:
+) -> None:
     """
     Pipeline channel handling:
       1) Load non-alignment OME-Zarr channels at highest level on the template grid,
@@ -361,69 +199,138 @@ def _process_additional_channels_pipeline(
       2) Chain ls->template then template->CCF transforms; write CCF-space
          histology_<channel>.nrrd into outputs.histology_ccf (fixed grid = CCF).
     """
-    metadata = asset_info.zarr_volumes.metadata
-    processing = asset_info.zarr_volumes.processing
 
-    a_bugged_img = None
     for zarr_path in asset_info.zarr_volumes.additional:
         # Load the image in the vanilla space
         ch_str = Path(zarr_path).stem
-        img_raw = zarr_to_ants(
+        img_raw = zarr_to_sitk(
             zarr_path, asset_info.zarr_volumes.metadata, level=level
         )
-        ants.image_write(
-            img_raw, str(outputs.histology_img / f"{ch_str}.nii.gz")
-        )
+        # Need to save everything in SRA orientation for IBL ephys gui
+        channel_dst = outputs.histology_img / f"{ch_str}.nrrd"
+        _convert_img_to_sra_and_write(img_raw, channel_dst)
+        del img_raw
+        # Need this image in ANTs format for transform application
+        # Unfortunately, going through disk is one of the simpler ways to do
+        # this
+        ants_hist_img = ants.image_read(str(channel_dst))
+        # Mutates in place. ants_hist_img will now be in pipeline space
+        # Importantly, pipeline_histology_space_img is also SRA!
+        ants.copy_image_info(pipeline_histology_space_img, ants_hist_img)
 
-        # Map to CCF
-        # First mimic the pipeline's histology loading, buggy though it may be
-        img_bugged = mimic_pipeline_zarr_to_ants(
-            zarr_path, metadata, processing, level=level
-        )
-        # So we can use the existing pipeline transforms
+        # Map to CCF using existing pipeline transforms
         ch_in_ccf = ants.apply_transforms(
             refs.ccf_25,
-            img_bugged,
+            ants_hist_img,
             asset_info.pipeline_registration_chains.img_tx_str,
             whichtoinvert=asset_info.pipeline_registration_chains.img_tx_inverted,
         )
-        ants.image_write(
-            ch_in_ccf, str(outputs.histology_ccf / f"histology_{ch_str}.nrrd")
-        )
-        # Get the histology domain of the buggy ccf transform
-        a_bugged_img = img_bugged
-    return a_bugged_img
+        ch_in_ccf_dst = outputs.histology_ccf / f"histology_{ch_str}.nrrd"
+        ch_in_ccf_tmp_dst = Path(f"/scratch/histology-{ch_str}-ccf.nrrd")
+        ants.image_write(ch_in_ccf, str(ch_in_ccf_tmp_dst))
+        del ch_in_ccf
+        try:
+            _compress_reorient_nrrd_file(
+                ch_in_ccf_tmp_dst, ch_in_ccf_dst, force_orientation="SRA"
+            )
+        finally:
+            ch_in_ccf_tmp_dst.unlink(missing_ok=True)
 
 
-def _apply_ccf_pt_tx_buggy_domain_then_fix(
-    ccf_space_img: ANTsImage,
-    buggy_hist_domain_img: ANTsImage,
-    hist_domain_img: ANTsImage,
+def _apply_ccf_inverse_tx_then_fix_domain(
+    ccf_space_img_moving: ANTsImage,
+    pipeline_space_fixed_img: ANTsImage,
+    correct_hist_domain_img: ANTsImage,
     asset_info: AssetInfo,
     **kwargs: Any,
 ) -> ANTsImage:
+    """
+    Apply the inverse pipeline (CCF->histology) transform then repair image
+    domain.
+
+    This helper maps a CCF-space image (template or labels) back into the
+    mouse's native histology (SmartSPIM) space using the point
+    (template->histology) transform chain inferred from the pipeline output.
+    The inverse warps place the image on a buggy/intermediate spatial domain
+    produced by the pipeline registration; we subsequently overwrite the
+    spacing, origin, and direction with the "correct" histology image domain so
+    downstream consumers (e.g. IBL ephys GUI) see consistent physical
+    coordinates.
+
+    Parameters
+    ----------
+    ccf_space_img_moving : ANTsImage
+        Image defined in CCF/template space to be moved into histology space.
+        (E.g. average template or lateralized label volume.)
+    pipeline_space_fixed_img : ANTsImage
+        An image in the pipeline's (buggy) histology space used as the fixed
+        image for `ants.apply_transforms`. Must correspond to the same mouse
+        and have the geometry expected by the pipeline transforms.
+    correct_hist_domain_img : ANTsImage
+        Reference histology image whose spacing, origin, and direction encode
+        the desired (repaired) physical domain. These values are copied onto
+        the result after transformation.
+    asset_info : AssetInfo
+        Container with pipeline registration chain paths; specifically
+        ``asset_info.pipeline_registration_chains.pt_tx_str`` (list of
+        transform filenames) and ``pt_tx_inverted`` (list of booleans
+        indicating inversion state per transform).
+    **kwargs : Any
+        Additional keyword arguments forwarded to ``ants.apply_transforms``.
+        Common values include ``interpolator="linear"`` for continuous images
+        or ``interpolator="genericLabel"`` for label volumes.
+
+    Returns
+    -------
+    ANTsImage
+        The CCF-space input resampled into histology space with corrected
+        spacing, origin, and direction (i.e., a domain-consistent image ready for
+        serialization in SRA orientation if needed).
+
+    Notes
+    -----
+    The pipeline domain mismatch arises because transforms were estimated on a
+    preprocessed version of the histology image with altered geometry.
+    """
+
     pt_tx_str = asset_info.pipeline_registration_chains.pt_tx_str
     pt_tx_inverted = asset_info.pipeline_registration_chains.pt_tx_inverted
     # This will be in the buggy domain, but we can fix that later
     ccf_space_img_in_hist_space: ANTsImage = ants.apply_transforms(
-        fixed=buggy_hist_domain_img,
-        moving=ccf_space_img,
+        fixed=pipeline_space_fixed_img,
+        moving=ccf_space_img_moving,
         transformlist=pt_tx_str,
         whichtoinvert=pt_tx_inverted,
         **kwargs,
     )
     # Update the spatial domain to match the real image
-    ccf_space_img_in_hist_space.set_spacing(hist_domain_img.spacing)
-    ccf_space_img_in_hist_space.set_origin(hist_domain_img.origin)
-    ccf_space_img_in_hist_space.set_direction(hist_domain_img.direction)
+    ccf_space_img_in_hist_space.set_spacing(correct_hist_domain_img.spacing)
+    ccf_space_img_in_hist_space.set_origin(correct_hist_domain_img.origin)
+    ccf_space_img_in_hist_space.set_direction(
+        correct_hist_domain_img.direction
+    )
     return ccf_space_img_in_hist_space
 
 
-def _compress_nrrd(input_path: Path, output_path: Path) -> None:
+def _compress_reorient_nrrd_file(
+    input_path: Path, output_path: Path, force_orientation: str | None = None
+) -> None:
     img = sitk.ReadImage(str(input_path))
+    orientation_code = (
+        sitk.DICOMOrientImageFilter.GetOrientationFromDirectionCosines(
+            img.GetDirection()
+        )
+    )
+    if force_orientation is not None and orientation_code != force_orientation:
+        logger.info(
+            f"Reorienting {input_path} from {orientation_code} to {force_orientation}"
+        )
+        out_img = sitk.DICOMOrient(img, force_orientation)
+    else:
+        out_img = img
     # Write to temporary compressed nrrd
     temp_output_path = output_path.with_suffix(".temp.nrrd")
-    sitk.WriteImage(img, str(temp_output_path), useCompression=True)
+    sitk.WriteImage(out_img, str(temp_output_path), useCompression=True)
     # Replace original file with compressed version
     temp_output_path.replace(output_path)
 
@@ -431,9 +338,8 @@ def _compress_nrrd(input_path: Path, output_path: Path) -> None:
 def _transform_ccf_to_image_space(
     asset_info: AssetInfo,
     refs: ReferenceVolumes,
-    ref_paths: ReferencePaths,
-    raw_img: ANTsImage,
-    raw_img_domain_bugged: ANTsImage,
+    raw_hist_img: ANTsImage,
+    pipeline_hist_domain_img: ANTsImage,
     outputs: OutputDirs,
 ) -> None:
     """
@@ -441,36 +347,68 @@ def _transform_ccf_to_image_space(
     """
     # point transforms are inverse of image transforms
     # Need to use buggy domain to use the ccf transforms
-    ccf_in_hist_img = _apply_ccf_pt_tx_buggy_domain_then_fix(
+    # The IBL ephys gui expects SRA orientation. Reorienting the hist-domain
+    # image to be SRA will ensure the transformed CCF images are also SRA.
+
+    ccf_in_hist_img = _apply_ccf_inverse_tx_then_fix_domain(
         refs.ccf_25,
-        buggy_hist_domain_img=raw_img_domain_bugged,
-        hist_domain_img=raw_img,
+        pipeline_space_fixed_img=pipeline_hist_domain_img,
+        correct_hist_domain_img=raw_hist_img,
         asset_info=asset_info,
     )
+    ccf_in_hist_img_tmp_dst = Path("/scratch/histology-ccf-in-mouse.nrrd")
     ccf_in_hist_img_path = outputs.histology_img / "ccf_in_mouse.nrrd"
-    ants.image_write(ccf_in_hist_img, str(ccf_in_hist_img_path))
-    _compress_nrrd(ccf_in_hist_img_path, ccf_in_hist_img_path)
+    ants.image_write(ccf_in_hist_img, str(ccf_in_hist_img_tmp_dst))
+    del ccf_in_hist_img
+    try:
+        _compress_reorient_nrrd_file(
+            ccf_in_hist_img_tmp_dst,
+            ccf_in_hist_img_path,
+            force_orientation="SRA",
+        )
+    finally:
+        ccf_in_hist_img_tmp_dst.unlink(missing_ok=True)
 
+
+def _transform_ccf_labels_to_image_space(
+    asset_info: AssetInfo,
+    ref_paths: ReferencePaths,
+    raw_hist_img: ANTsImage,
+    pipeline_hist_domain_img: ANTsImage,
+    outputs: OutputDirs,
+) -> None:
     # Load the lateralized image
     ccf_labels_lateralized_25 = ants.image_read(
         str(ref_paths.ccf_labels_lateralized_25),
         pixeltype=None,  # type: ignore
     )
-    ccf_labels_in_hist_img = _apply_ccf_pt_tx_buggy_domain_then_fix(
+    ccf_labels_in_hist_img = _apply_ccf_inverse_tx_then_fix_domain(
         ccf_labels_lateralized_25,
-        buggy_hist_domain_img=raw_img_domain_bugged,
-        hist_domain_img=raw_img,
+        pipeline_space_fixed_img=pipeline_hist_domain_img,
+        correct_hist_domain_img=raw_hist_img,
         asset_info=asset_info,
         interpolator="genericLabel",
+    )
+    del ccf_labels_lateralized_25
+    ccf_labels_in_hist_img_tmp_dst = Path(
+        "/scratch/histology-ccf-labels-in-mouse.nrrd"
     )
     ccf_labels_in_hist_img_path = (
         outputs.histology_img / "labels_in_mouse.nrrd"
     )
     ants.image_write(
         ccf_labels_in_hist_img,
-        str(ccf_labels_in_hist_img_path),
+        str(ccf_labels_in_hist_img_tmp_dst),
     )
-    _compress_nrrd(ccf_labels_in_hist_img_path, ccf_labels_in_hist_img_path)
+    del ccf_labels_in_hist_img
+    try:
+        _compress_reorient_nrrd_file(
+            ccf_labels_in_hist_img_tmp_dst,
+            ccf_labels_in_hist_img_path,
+            force_orientation="SRA",
+        )
+    finally:
+        ccf_labels_in_hist_img_tmp_dst.unlink(missing_ok=True)
 
 
 # ---- Stage 7: per-row processing (probe-centric) -----------------------------
@@ -709,78 +647,42 @@ def _maybe_run_ephys(
 
 
 def _process_histology_and_ephys(args: Args):
-    paths = _resolve_paths(args)
+    paths = resolve_paths(args)
 
-    # Run validation checks
-    logger.info("Running validation checks...")
-    validator = PipelineValidator(args, paths, skip_resource_checks=False)
-    validation_results = validator.validate_all()
-
-    # If --validate-only flag is set, print summary and exit
-    if args.validate_only:
-        validator.print_summary(validation_results)
-        if validator.has_errors(validation_results):
-            logger.error("Validation failed. Please fix the errors above.")
-            sys.exit(1)
-        else:
-            logger.info("Validation passed. Ready to run the pipeline.")
-            sys.exit(0)
-
-    # If validation has errors, fail early
-    if validator.has_errors(validation_results):
-        validator.print_summary(validation_results)
-        logger.error(
-            "Validation failed. Please fix the errors above before running the pipeline."
-        )
-        sys.exit(1)
-
-    # Print warnings if any (but continue processing)
-    warnings = [r for r in validation_results if r.severity == "warning"]
-    if warnings:
-        logger.warning(
-            f"Validation passed with {len(warnings)} warning(s). See details above."
-        )
+    handle_validation(paths, args)
 
     # Keep a manifest snapshot for reproducibility
     shutil.copy(paths.manifest_csv, "/results/manifest.csv")
 
     manifest_df = pd.read_csv(paths.manifest_csv)
-    s = manifest_df["mouseid"].astype("string")
-    val = s.iat[0]
-    if pd.isna(val):
-        raise ValueError("mouseid is missing in first row")
-    mouse_id: str = val  # now definitely a str
+    mouse_id: str = str(manifest_df["mouseid"].astype("string").iat[0])
     ref_paths = ReferencePaths()
     ref_imgs = ReferenceVolumes.from_paths(ref_paths)
-    out = _prepare_result_dirs(mouse_id, paths.results_root)
-    asset_info = _find_asset_info(paths)
+    out = prepare_result_dirs(mouse_id, paths.results_root)
+    asset_info = find_asset_info(paths)
     node, zarr_metadata = _open_zarr(asset_info.zarr_volumes.registration)
-    level = _determine_desired_level(zarr_metadata, desired_voxel_size_um=25.0)
+    level = determine_desired_level(zarr_metadata, desired_voxel_size_um=25.0)
 
-    raw_img = _write_registration_channel_outputs(
+    _copy_registration_channel_ccf_sra(asset_info, out)
+    raw_img_path, pipeline_img_path = _write_registration_channel_images(
         asset_info, out, level=level, opened_zarr=(node, zarr_metadata)
     )
-    a_bugged_img = _process_additional_channels_pipeline(
-        asset_info, ref_imgs, out
+    pipeline_img_ants = ants.image_read(str(pipeline_img_path))
+    raw_img_ants = ants.image_read(str(raw_img_path))
+    _process_additional_channels_pipeline(
+        pipeline_img_ants,
+        asset_info,
+        ref_imgs,
+        out,
+        level=level,
     )
-    if a_bugged_img is None:
-        raw_img_domain_bugged = mimic_pipeline_zarr_to_ants(
-            asset_info.zarr_volumes.registration,
-            asset_info.zarr_volumes.metadata,
-            asset_info.zarr_volumes.processing,
-            level=level,
-        )
-    else:
-        raw_img_domain_bugged = a_bugged_img
     _transform_ccf_to_image_space(
-        asset_info, ref_imgs, ref_paths, raw_img, raw_img_domain_bugged, out
+        asset_info, ref_imgs, raw_img_ants, pipeline_img_ants, out
     )
-    raw_img_stub, _ = zarr_to_sitk_stub(
-        asset_info.zarr_volumes.registration,
-        asset_info.zarr_volumes.metadata,
-        opened_zarr=(node, zarr_metadata),
+    _transform_ccf_labels_to_image_space(
+        asset_info, ref_paths, raw_img_ants, pipeline_img_ants, out
     )
-    raw_img_stub_buggy, _ = mimic_pipeline_zarr_to_anatomical_stub(
+    raw_img_stub, raw_img_stub_buggy, _ = base_and_pipeline_anatomical_stub(
         asset_info.zarr_volumes.registration,
         asset_info.zarr_volumes.metadata,
         asset_info.zarr_volumes.processing,
@@ -814,7 +716,7 @@ def main() -> None:
     """
     Orchestrate the full processing pipeline.
     """
-    args = _parse_and_normalize_args()
+    args = parse_and_normalize_args()
     _process_histology_and_ephys(args)
 
 
