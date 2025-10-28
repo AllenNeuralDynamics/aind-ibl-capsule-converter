@@ -220,9 +220,9 @@ class Limits:
 
     def __init__(
         self,
-        max_ephys: int | None = 4,
+        max_ephys: int | None = 2,
         max_registration: int | None = 1,
-        max_manifest_rows: int | None = 4,
+        max_manifest_rows: int | None = None,
         max_scratch: int | None = None,
         max_results: int | None = None,
         max_data: int | None = None,
