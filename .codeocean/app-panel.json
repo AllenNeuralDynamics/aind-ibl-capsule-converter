@@ -24,13 +24,6 @@
 			"required": true
 		},
 		{
-			"id": "C5fAAEKk9jyh9fFZ",
-			"name": "legacy",
-			"param_name": "legacy",
-			"type": "text",
-			"value_type": "string"
-		},
-		{
 			"id": "y85wOvRSQfUyOJmd",
 			"name": "update_packages_from_source",
 			"param_name": "update_packages_from_source",
@@ -40,6 +33,23 @@
 			"value_type": "integer",
 			"default_value": "1",
 			"maximum": 1
+		},
+		{
+			"id": "7zOttIl2hWvsToR1",
+			"name": "Skip ephys",
+			"param_name": "skip-ephys",
+			"type": "text",
+			"value_type": "integer",
+			"default_value": "0"
+		},
+		{
+			"id": "XUFJja0hgkIOlUMY",
+			"name": "Run async",
+			"param_name": "run-async",
+			"description": "Run async",
+			"type": "text",
+			"value_type": "integer",
+			"default_value": "1"
 		}
 	]
 }
