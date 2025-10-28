@@ -15,16 +15,35 @@
 					"version": "12.9ubuntu3"
 				},
 				{
-					"name": "libwavpack-dev",
-					"version": "5.4.0-1build2"
+					"name": "ca-certificates",
+					"version": "20240203~22.04.1"
+				},
+				{
+					"name": "curl",
+					"version": "7.81.0-1ubuntu1.21"
+				},
+				{
+					"name": "debhelper"
+				},
+				{
+					"name": "devscripts"
+				},
+				{
+					"name": "equivs"
+				},
+				{
+					"name": "fakeroot"
+				},
+				{
+					"name": "git",
+					"version": "1:2.34.1-1ubuntu1.15"
+				},
+				{
+					"name": "pkg-config"
 				},
 				{
 					"name": "tree",
 					"version": "2.0.2-1"
-				},
-				{
-					"name": "wavpack",
-					"version": "5.4.0-1build2"
 				}
 			],
 			"install_software_properties_common": true
