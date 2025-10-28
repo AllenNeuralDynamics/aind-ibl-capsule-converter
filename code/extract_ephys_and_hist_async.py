@@ -82,6 +82,7 @@ from asyncio import Task
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -138,8 +139,6 @@ os.environ.setdefault("PYTHONASYNCIODEBUG", "1")
 EPROCS = int(os.environ.get("EPROCS", "8"))  # tune for your box
 IO_THREADS = 40
 # ---- Stage 1: args and input resolution -------------------------------------
-
-
 
 
 def _thread_excepthook(args: threading.ExceptHookArgs):
@@ -305,7 +304,7 @@ class EphysCoordinator:
                     async with self._sem:
                         loop = asyncio.get_running_loop()
                         return await loop.run_in_executor(
-                            self.pool, run_sync, *args, **kwargs
+                            self.pool, partial(run_sync, *args, **kwargs)
                         )
 
                 t = asyncio.create_task(_runner(), name=f"ephys-{key}")
