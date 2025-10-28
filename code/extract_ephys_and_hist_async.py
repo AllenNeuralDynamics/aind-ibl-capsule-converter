@@ -210,6 +210,13 @@ class Limits:
     registration: asyncio.BoundedSemaphore | nullcontext
     manifest_rows: asyncio.BoundedSemaphore | nullcontext
     io: IOLimits
+    # Store original numeric values for subprocess serialization
+    max_ephys: int | None
+    max_registration: int | None
+    max_manifest_rows: int | None
+    max_scratch: int | None
+    max_results: int | None
+    max_data: int | None
 
     def __init__(
         self,
@@ -220,6 +227,14 @@ class Limits:
         max_results: int | None = None,
         max_data: int | None = None,
     ):
+        # Store numeric values
+        self.max_ephys = max_ephys
+        self.max_registration = max_registration
+        self.max_manifest_rows = max_manifest_rows
+        self.max_scratch = max_scratch
+        self.max_results = max_results
+        self.max_data = max_data
+        # Create semaphores
         self.ephys = _maybe_semaphore(max_ephys)
         self.registration = _maybe_semaphore(max_registration)
         self.manifest_rows = _maybe_semaphore(max_manifest_rows)
@@ -1182,6 +1197,113 @@ async def _process_manifest_async(
     return processed_results
 
 
+def _run_manifest_subprocess_sync(
+    manifest_df: pd.DataFrame,
+    asset_info: AssetInfo,
+    ref_paths: ReferencePaths,
+    out: OutputDirs,
+    args: Args,
+    max_ephys: int | None,
+    max_manifest_rows: int | None,
+    max_scratch: int | None,
+    max_results: int | None,
+    max_data: int | None,
+) -> list[ProcessResult]:
+    """
+    Subprocess entry point for manifest processing.
+
+    Recreates heavy objects (AllenAtlas, EphysCoordinator, Limits) in the
+    subprocess, then runs the async manifest processing in a new event loop.
+
+    This function is designed to be run via ProcessPoolExecutor from the main
+    orchestrator, moving AllenAtlas and stub image creation into an isolated
+    subprocess for better memory management.
+
+    Parameters
+    ----------
+    manifest_df : pd.DataFrame
+        Manifest rows to process
+    asset_info : AssetInfo
+        SmartSPIM asset metadata and registration paths
+    ref_paths : ReferencePaths
+        Paths to reference volumes (CCF, template, etc.)
+    out : OutputDirs
+        Output directory structure
+    args : Args
+        CLI arguments
+    max_ephys : int | None
+        Maximum concurrent ephys extractions
+    max_manifest_rows : int | None
+        Maximum concurrent manifest row processing
+    max_scratch : int | None
+        I/O concurrency limit for /scratch
+    max_results : int | None
+        I/O concurrency limit for /results
+    max_data : int | None
+        I/O concurrency limit for /data
+
+    Returns
+    -------
+    list[ProcessResult]
+        Processing results for each manifest row
+    """
+
+    async def _async_main():
+        loop = asyncio.get_running_loop()
+        loop.set_debug(True)
+        loop.set_exception_handler(_asyncio_exception_handler)
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=IO_THREADS))
+
+        # Recreate Limits
+        limits = Limits(
+            max_ephys=max_ephys,
+            max_registration=None,  # Not used in manifest processing
+            max_manifest_rows=max_manifest_rows,
+            max_scratch=max_scratch,
+            max_results=max_results,
+            max_data=max_data,
+        )
+
+        # Recreate AllenAtlas in subprocess
+        logger.info("[Subprocess] Loading AllenAtlas in subprocess")
+        ibl_atlas = await io_to_thread_on(
+            limits,
+            str(ref_paths.ibl_atlas_histology_path),
+            AllenAtlas,
+            25,
+            hist_path=ref_paths.ibl_atlas_histology_path,
+        )
+
+        # Reopen zarr in subprocess
+        logger.info("[Subprocess] Opening zarr in subprocess")
+        node, zarr_metadata = await to_thread_logged(
+            _open_zarr, asset_info.zarr_volumes.registration
+        )
+
+        # Create EphysCoordinator with new pool in subprocess
+        ephys_pool = ProcessPoolExecutor(max_workers=EPROCS)
+        ephys = EphysCoordinator(pool=ephys_pool, max_inflight=2)
+
+        try:
+            logger.info("[Subprocess] Starting manifest processing")
+            result = await _process_manifest_async(
+                manifest_df,
+                asset_info,
+                ibl_atlas,
+                out,
+                node,
+                zarr_metadata,
+                args,
+                ephys,
+                limits,
+            )
+            return result
+        finally:
+            ephys_pool.shutdown(wait=True)
+
+    return asyncio.run(_async_main())
+
+
 # ---- Orchestrator (new short main) ------------------------------------------
 async def _process_histology_and_ephys_async(
     args: Args, max_workers: int = 40
@@ -1216,28 +1338,20 @@ async def _process_histology_and_ephys_async(
         asset_info_task = tg.create_task(
             to_thread_logged(find_asset_info, paths), name="find-asset-info"
         )
-        ibl_atlas_task = tg.create_task(
-            io_to_thread_on(
-                limits,
-                str(ref_paths.ibl_atlas_histology_path),
-                AllenAtlas,
-                25,
-                hist_path=ref_paths.ibl_atlas_histology_path,
-            ),
-            name="load-ibl-atlas",
-        )
     ref_imgs = ref_imgs_task.result()
     asset_info = asset_info_task.result()
-    ibl_atlas = ibl_atlas_task.result()
 
     out = prepare_result_dirs(mouse_id, paths.results_root)
 
+    # Create process pool for manifest processing (runs in subprocess)
+    manifest_pool = ProcessPoolExecutor(max_workers=1)
+
+    # Open zarr for volume processing (manifest will reopen in subprocess)
     node, zarr_metadata = _open_zarr(asset_info.zarr_volumes.registration)
-    ephys_pool = ProcessPoolExecutor(max_workers=EPROCS)
-    ephys = EphysCoordinator(pool=ephys_pool, max_inflight=2)  # tune lane size
+
     skip_ephys_msg = " (ephys disabled)" if args.skip_ephys else ""
     logger.info(
-        f"[Orchestrator] Launching 3 parallel task groups: volumes, manifest ({num_probes} probes), CCF copy{skip_ephys_msg}"
+        f"[Orchestrator] Launching 3 parallel task groups: volumes, manifest ({num_probes} probes) in subprocess, CCF copy{skip_ephys_msg}"
     )
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
@@ -1252,26 +1366,35 @@ async def _process_histology_and_ephys_async(
             ),
             name=f"create-volumes-{mouse_id}",
         )
-        manifest_task = tg.create_task(
-            _process_manifest_async(
+
+        # Submit manifest processing to subprocess
+        async def _run_manifest_in_subprocess():
+            return await loop.run_in_executor(
+                manifest_pool,
+                _run_manifest_subprocess_sync,
                 manifest_df,
                 asset_info,
-                ibl_atlas,
+                ref_paths,
                 out,
-                node,
-                zarr_metadata,
                 args,
-                ephys,
-                limits,
-            ),
-            name=f"process-manifest-{mouse_id}",
+                limits.max_ephys,
+                limits.max_manifest_rows,
+                limits.max_scratch,
+                limits.max_results,
+                limits.max_data,
+            )
+
+        manifest_task = tg.create_task(
+            _run_manifest_in_subprocess(),
+            name=f"process-manifest-subprocess-{mouse_id}",
         )
+
         tg.create_task(
             _copy_registration_channel_ccf_sra_async(asset_info, out, limits),
             name=f"copy-ccf-registration-{mouse_id}",
         )
     logger.info("[Orchestrator] All parallel tasks completed")
-    ephys_pool.shutdown(wait=True)
+    manifest_pool.shutdown(wait=True)
     processed_results = manifest_task.result()
     num_succeeded = sum(1 for r in processed_results if r.wrote_files)
     num_failed = len(processed_results) - num_succeeded
