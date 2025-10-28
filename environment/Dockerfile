@@ -1,4 +1,4 @@
-# hash:sha256:bcf249a366f3bdbd9c458f2fa7cf50184acf865c6f5ab2bf7c009720e951102f
+# hash:sha256:5cec88c9cb36b872d4e1fa15dfd9c68a3c45037db4268e5335b10ab333d1bdae
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/code-server-python-extensions-pack:code-server4.101.2python3.12.4aind-metadata-mcp0.4.2
 
@@ -9,9 +9,15 @@ COPY git-askpass /
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential=12.9ubuntu3 \
-        libwavpack-dev=5.4.0-1build2 \
+        ca-certificates=20240203~22.04.1 \
+        curl=7.81.0-1ubuntu1.21 \
+        debhelper \
+        devscripts \
+        equivs \
+        fakeroot \
+        git=1:2.34.1-1ubuntu1.15 \
+        pkg-config \
         tree=2.0.2-1 \
-        wavpack=5.4.0-1build2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY postInstall /

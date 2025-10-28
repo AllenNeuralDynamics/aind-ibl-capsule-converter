@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  build-essential devscripts debhelper equivs fakeroot dpkg-dev \
+  curl ca-certificates git pkg-config
+
+# Install wavpack 5.8.1 from debian package
+workdir="$(mktemp -d)"
+pushd "$workdir"
+
+dget -u https://deb.debian.org/debian/pool/main/w/wavpack/wavpack_5.8.1-1.dsc
+cd wavpack-5.8.1
+mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
+DEB_BUILD_OPTIONS=nocheck debuild -us -uc -b
+apt-get install -y ../wavpack_5.8.1-1_*.deb ../libwavpack1_5.8.1-1_*.deb ../libwavpack-dev_5.8.1-1_*.deb
+
+popd
+
+apt-get purge -y devscripts debhelper equivs fakeroot pkg-config
+apt-get autoremove -y --purge
+rm -rf "$workdir" /var/lib/apt/lists/*
+
+# Verify
+wavpack --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 cat > requirements.txt <<'REQ'
@@ -18,4 +43,4 @@ aind-s3-cache>=0.1
 aind-zarr-utils>=0.8
 REQ
 
-uv pip install --system -r requirements.txt
+uv pip install --no-cache --system -r requirements.txt
