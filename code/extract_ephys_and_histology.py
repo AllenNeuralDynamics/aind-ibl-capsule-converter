@@ -213,7 +213,7 @@ def _process_additional_channels_pipeline(
         # Need this image in ANTs format for transform application
         # Unfortunately, going through disk is one of the simpler ways to do
         # this
-        ants_hist_img = ants.image_read(str(channel_dst))
+        ants_hist_img = ants.image_read(str(channel_dst), pixeltype=None)  # type: ignore
         # Mutates in place. ants_hist_img will now be in pipeline space
         # Importantly, pipeline_histology_space_img is also SRA!
         ants.copy_image_info(pipeline_histology_space_img, ants_hist_img)
@@ -667,8 +667,8 @@ def _process_histology_and_ephys(args: Args):
     raw_img_path, pipeline_img_path = _write_registration_channel_images(
         asset_info, out, level=level, opened_zarr=(node, zarr_metadata)
     )
-    pipeline_img_ants = ants.image_read(str(pipeline_img_path))
-    raw_img_ants = ants.image_read(str(raw_img_path))
+    pipeline_img_ants = ants.image_read(str(pipeline_img_path), pixeltype=None)  # type: ignore
+    raw_img_ants = ants.image_read(str(raw_img_path), pixeltype=None)  # type: ignore
     _process_additional_channels_pipeline(
         pipeline_img_ants,
         asset_info,

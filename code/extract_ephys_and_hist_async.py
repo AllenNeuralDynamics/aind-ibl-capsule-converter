@@ -94,19 +94,14 @@ from aind_ephys_ibl_gui_conversion.ephys import (
     extract_continuous,
     extract_spikes,
 )
-from aind_ephys_ibl_gui_conversion.histology import (
-    create_slicer_fcsv,
-)
+from aind_ephys_ibl_gui_conversion.histology import create_slicer_fcsv
 from aind_registration_utils.ants import apply_ants_transforms_to_point_arr
 from aind_zarr_utils import neuroglancer_annotations_to_anatomical
 from aind_zarr_utils.pipeline_transformed import (
     base_and_pipeline_anatomical_stub,
     base_and_pipeline_zarr_to_sitk,
 )
-from aind_zarr_utils.zarr import (
-    _open_zarr,
-    zarr_to_sitk,
-)
+from aind_zarr_utils.zarr import _open_zarr, zarr_to_sitk
 from ants.core import ANTsImage
 from extract_ephys_hist_core import (
     determine_desired_level,
@@ -664,7 +659,11 @@ async def _process_additional_channel_pipeline_async(
     # Unfortunately, going through disk is one of the simpler ways to do
     # this
     ants_hist_img = await io_to_thread_on(
-        limits, str(channel_dst), ants.image_read, str(channel_dst)
+        limits,
+        str(channel_dst),
+        ants.image_read,
+        str(channel_dst),
+        pixeltype=None,
     )
     logger.info(f"[Channel {ch_str}] read into ANTs complete")
 
@@ -763,12 +762,17 @@ async def _create_volumes_async(
                 str(pipeline_img_path),
                 ants.image_read,
                 str(pipeline_img_path),
+                pixeltype=None,
             ),
             name="load-ants-pipeline-img",
         )
         raw_img_ants_task = tg.create_task(
             io_to_thread_on(
-                limits, str(raw_img_path), ants.image_read, str(raw_img_path)
+                limits,
+                str(raw_img_path),
+                ants.image_read,
+                str(raw_img_path),
+                pixeltype=None,
             ),
             name="load-ants-raw-img",
         )
