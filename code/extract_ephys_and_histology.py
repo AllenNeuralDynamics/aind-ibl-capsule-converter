@@ -102,6 +102,7 @@ from aind_zarr_utils.zarr import (
 )
 from ants.core import ANTsImage
 from extract_ephys_hist_core import (
+    _BLESSED_DIRECTION,
     determine_desired_level,
     find_asset_info,
     handle_validation,
@@ -127,15 +128,17 @@ logger = logging.getLogger(__name__)
 # ---- Stage 1: args and input resolution -------------------------------------
 
 
-def _convert_img_to_sra_and_write(img: sitk.Image, output_path: Path) -> None:
+def _convert_img_direction_and_write(
+    img: sitk.Image, output_path: Path, direction: str = _BLESSED_DIRECTION
+) -> None:
     """
-    Convert an image to SRA orientation and write as compressed NRRD.
+    Convert an image to the specified orientation and write as compressed NRRD.
     """
-    img_sra = sitk.DICOMOrient(img, "SRA")
-    sitk.WriteImage(img_sra, str(output_path), useCompression=True)
+    img_oriented = sitk.DICOMOrient(img, direction)
+    sitk.WriteImage(img_oriented, str(output_path), useCompression=True)
 
 
-def _copy_registration_channel_ccf_sra(
+def _copy_registration_channel_ccf_reorient(
     asset_info: AssetInfo, outputs: OutputDirs
 ) -> None:
     if not asset_info.registration_in_ccf_precomputed.exists():
@@ -146,7 +149,7 @@ def _copy_registration_channel_ccf_sra(
     # Save the precomputed CCF-space image as a nrrd
     ccf_img = sitk.ReadImage(str(asset_info.registration_in_ccf_precomputed))
     img_in_ccf_dst = outputs.histology_ccf / "histology_registration.nrrd"
-    _convert_img_to_sra_and_write(ccf_img, img_in_ccf_dst)
+    _convert_img_direction_and_write(ccf_img, img_in_ccf_dst)
 
 
 def _write_registration_channel_images(
@@ -176,12 +179,12 @@ def _write_registration_channel_images(
         opened_zarr=(zarr_node, zarr_metadata),
     )
     raw_img_dst = outputs.histology_img / "histology_registration.nrrd"
-    _convert_img_to_sra_and_write(raw_img, raw_img_dst)
+    _convert_img_direction_and_write(raw_img, raw_img_dst)
     del raw_img
     bugged_img_dst = (
         outputs.histology_img / "histology_registration_pipeline.nrrd"
     )
-    _convert_img_to_sra_and_write(pipeline_raw_img, bugged_img_dst)
+    _convert_img_direction_and_write(pipeline_raw_img, bugged_img_dst)
     return raw_img_dst, bugged_img_dst
 
 
@@ -206,16 +209,16 @@ def _process_additional_channels_pipeline(
         img_raw = zarr_to_sitk(
             zarr_path, asset_info.zarr_volumes.metadata, level=level
         )
-        # Need to save everything in SRA orientation for IBL ephys gui
+        # Need to save everything in IRP orientation for IBL ephys gui
         channel_dst = outputs.histology_img / f"{ch_str}.nrrd"
-        _convert_img_to_sra_and_write(img_raw, channel_dst)
+        _convert_img_direction_and_write(img_raw, channel_dst)
         del img_raw
         # Need this image in ANTs format for transform application
         # Unfortunately, going through disk is one of the simpler ways to do
         # this
         ants_hist_img = ants.image_read(str(channel_dst), pixeltype=None)  # type: ignore
         # Mutates in place. ants_hist_img will now be in pipeline space
-        # Importantly, pipeline_histology_space_img is also SRA!
+        # Importantly, pipeline_histology_space_img is also IRP!
         ants.copy_image_info(pipeline_histology_space_img, ants_hist_img)
 
         # Map to CCF using existing pipeline transforms
@@ -231,7 +234,9 @@ def _process_additional_channels_pipeline(
         del ch_in_ccf
         try:
             _compress_reorient_nrrd_file(
-                ch_in_ccf_tmp_dst, ch_in_ccf_dst, force_orientation="SRA"
+                ch_in_ccf_tmp_dst,
+                ch_in_ccf_dst,
+                force_orientation=_BLESSED_DIRECTION,
             )
         finally:
             ch_in_ccf_tmp_dst.unlink(missing_ok=True)
@@ -285,7 +290,7 @@ def _apply_ccf_inverse_tx_then_fix_domain(
     ANTsImage
         The CCF-space input resampled into histology space with corrected
         spacing, origin, and direction (i.e., a domain-consistent image ready for
-        serialization in SRA orientation if needed).
+        serialization in IRP orientation if needed).
 
     Notes
     -----
@@ -347,8 +352,8 @@ def _transform_ccf_to_image_space(
     """
     # point transforms are inverse of image transforms
     # Need to use buggy domain to use the ccf transforms
-    # The IBL ephys gui expects SRA orientation. Reorienting the hist-domain
-    # image to be SRA will ensure the transformed CCF images are also SRA.
+    # The IBL ephys gui expects IRP orientation. Reorienting the hist-domain
+    # image to be IRP will ensure the transformed CCF images are also IRP.
 
     ccf_in_hist_img = _apply_ccf_inverse_tx_then_fix_domain(
         refs.ccf_25,
@@ -364,7 +369,7 @@ def _transform_ccf_to_image_space(
         _compress_reorient_nrrd_file(
             ccf_in_hist_img_tmp_dst,
             ccf_in_hist_img_path,
-            force_orientation="SRA",
+            force_orientation=_BLESSED_DIRECTION,
         )
     finally:
         ccf_in_hist_img_tmp_dst.unlink(missing_ok=True)
@@ -405,7 +410,7 @@ def _transform_ccf_labels_to_image_space(
         _compress_reorient_nrrd_file(
             ccf_labels_in_hist_img_tmp_dst,
             ccf_labels_in_hist_img_path,
-            force_orientation="SRA",
+            force_orientation=_BLESSED_DIRECTION,
         )
     finally:
         ccf_labels_in_hist_img_tmp_dst.unlink(missing_ok=True)
@@ -663,7 +668,7 @@ def _process_histology_and_ephys(args: Args):
     node, zarr_metadata = _open_zarr(asset_info.zarr_volumes.registration)
     level = determine_desired_level(zarr_metadata, desired_voxel_size_um=25.0)
 
-    _copy_registration_channel_ccf_sra(asset_info, out)
+    _copy_registration_channel_ccf_reorient(asset_info, out)
     raw_img_path, pipeline_img_path = _write_registration_channel_images(
         asset_info, out, level=level, opened_zarr=(node, zarr_metadata)
     )
