@@ -104,6 +104,7 @@ from aind_zarr_utils.pipeline_transformed import (
 from aind_zarr_utils.zarr import _open_zarr, zarr_to_sitk
 from ants.core import ANTsImage
 from extract_ephys_hist_core import (
+    _BLESSED_DIRECTION,
     determine_desired_level,
     find_asset_info,
     handle_validation,
@@ -359,26 +360,29 @@ async def _compress_reorient_nrrd_file_async(
     )
 
 
-async def _convert_img_to_sra_and_write_async(
-    img: sitk.Image, dst_path: Path | str, limits: Limits
+async def _convert_img_to_direction_and_write_async(
+    img: sitk.Image,
+    dst_path: Path | str,
+    limits: Limits,
+    direction: str = _BLESSED_DIRECTION,
 ) -> None:
     logger.info(
-        f"[Histology] Converting image for {dst_path} to SRA orientation"
+        f"[Histology] Converting image for {dst_path} to {direction} orientation"
     )
-    img_sra = await to_thread_logged(sitk.DICOMOrient, img, "SRA")
+    img_oriented = await to_thread_logged(sitk.DICOMOrient, img, direction)
     logger.info(f"[Histology] Writing image for {dst_path} to disk")
     await io_to_thread_on(
         limits,
         str(dst_path),
         sitk.WriteImage,
-        img_sra,
+        img_oriented,
         str(dst_path),
         useCompression=True,
     )
     logger.info(f"[Histology] Done writing image for {dst_path} to disk")
 
 
-async def _copy_registration_channel_ccf_sra_async(
+async def _copy_registration_channel_ccf_reorient_async(
     asset_info: AssetInfo,
     outputs: OutputDirs,
     limits: Limits,
@@ -398,7 +402,9 @@ async def _copy_registration_channel_ccf_sra_async(
     )
     logger.info("[CCF Copy] Read precomupted CCF registration image")
     ccf_img_dest = str(outputs.histology_ccf / "histology_registration.nrrd")
-    await _convert_img_to_sra_and_write_async(ccf_img, ccf_img_dest, limits)
+    await _convert_img_to_direction_and_write_async(
+        ccf_img, ccf_img_dest, limits
+    )
     logger.info(
         "[CCF Copy] Completed: histology_registration.nrrd in CCF space"
     )
@@ -441,15 +447,17 @@ async def _write_registration_channel_images_async(
         outputs.histology_img / "histology_registration_pipeline.nrrd"
     )
     logger.info(
-        "[Histology] Registration channel conversion to SRA + write started"
+        f"[Histology] Registration channel conversion to {_BLESSED_DIRECTION} + write started"
     )
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
-            _convert_img_to_sra_and_write_async(raw_img, raw_img_dst, limits),
+            _convert_img_to_direction_and_write_async(
+                raw_img, raw_img_dst, limits
+            ),
             name="write-registration-raw",
         )
         tg.create_task(
-            _convert_img_to_sra_and_write_async(
+            _convert_img_to_direction_and_write_async(
                 pipeline_raw_img,
                 bugged_img_dst,
                 limits,
@@ -508,7 +516,7 @@ async def _apply_ccf_inverse_tx_then_fix_domain_async(
     ANTsImage
         The CCF-space input resampled into histology space with corrected
         spacing, origin, and direction (i.e., a domain-consistent image ready for
-        serialization in SRA orientation if needed).
+        serialization in IRP orientation if needed).
 
     Notes
     -----
@@ -548,8 +556,8 @@ async def _transform_ccf_to_image_space_async(
     """
     # point transforms are inverse of image transforms
     # Need to use buggy domain to use the ccf transforms
-    # The IBL ephys gui expects SRA orientation. Reorienting the hist-domain
-    # image to be SRA will ensure the transformed CCF images are also SRA.
+    # The IBL ephys gui expects IRP orientation. Reorienting the hist-domain
+    # image to be IRP will ensure the transformed CCF images are also IRP.
 
     logger.info(
         "[CCF Transform] Starting CCF template → image space transform"
@@ -576,7 +584,7 @@ async def _transform_ccf_to_image_space_async(
             ccf_in_hist_img_tmp_dst,
             ccf_in_hist_img_path,
             limits,
-            force_orientation="SRA",
+            force_orientation=_BLESSED_DIRECTION,
         )
     finally:
         ccf_in_hist_img_tmp_dst.unlink(missing_ok=True)
@@ -628,7 +636,7 @@ async def _transform_ccf_labels_to_image_space_async(
             ccf_labels_in_hist_img_tmp_dst,
             ccf_labels_in_hist_img_path,
             limits,
-            force_orientation="SRA",
+            force_orientation=_BLESSED_DIRECTION,
         )
     finally:
         ccf_labels_in_hist_img_tmp_dst.unlink(missing_ok=True)
@@ -651,10 +659,14 @@ async def _process_additional_channel_pipeline_async(
         zarr_to_sitk, zarr_path, asset_info.zarr_volumes.metadata, level=level
     )
     logger.info(f"[Channel {ch_str}] read from zarr complete")
-    # Need to save everything in SRA orientation for IBL ephys gui
+    # Need to save everything in IRP orientation for IBL ephys gui
     channel_dst = outputs.histology_img / f"{ch_str}.nrrd"
-    await _convert_img_to_sra_and_write_async(img_raw, channel_dst, limits)
-    logger.info(f"[Channel {ch_str}] converted to SRA and written to disk")
+    await _convert_img_to_direction_and_write_async(
+        img_raw, channel_dst, limits
+    )
+    logger.info(
+        f"[Channel {ch_str}] converted to {_BLESSED_DIRECTION} and written to disk"
+    )
     # Need this image in ANTs format for transform application
     # Unfortunately, going through disk is one of the simpler ways to do
     # this
@@ -668,7 +680,7 @@ async def _process_additional_channel_pipeline_async(
     logger.info(f"[Channel {ch_str}] read into ANTs complete")
 
     # Mutates in place. ants_hist_img will now be in pipeline space
-    # Importantly, pipeline_histology_space_img is also SRA!
+    # Importantly, pipeline_histology_space_img is also IRP!
     ants.copy_image_info(pipeline_histology_space_img, ants_hist_img)
 
     # Map to CCF using existing pipeline transforms
@@ -697,7 +709,10 @@ async def _process_additional_channel_pipeline_async(
             f"[Registered channel {ch_str}] compressing and reorienting"
         )
         await _compress_reorient_nrrd_file_async(
-            ch_in_ccf_tmp_dst, ch_in_ccf_dst, limits, force_orientation="SRA"
+            ch_in_ccf_tmp_dst,
+            ch_in_ccf_dst,
+            limits,
+            force_orientation=_BLESSED_DIRECTION,
         )
     finally:
         ch_in_ccf_tmp_dst.unlink(missing_ok=True)
@@ -1393,7 +1408,9 @@ async def _process_histology_and_ephys_async(
         )
 
         tg.create_task(
-            _copy_registration_channel_ccf_sra_async(asset_info, out, limits),
+            _copy_registration_channel_ccf_reorient_async(
+                asset_info, out, limits
+            ),
             name=f"copy-ccf-registration-{mouse_id}",
         )
     logger.info("[Orchestrator] All parallel tasks completed")
