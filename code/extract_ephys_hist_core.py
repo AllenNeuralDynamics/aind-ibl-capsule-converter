@@ -124,7 +124,7 @@ def resolve_paths(args: Args) -> InputPaths:
 
 def find_asset_info(paths: InputPaths) -> AssetInfo:
     ng_data = get_json(str(paths.neuroglancer_file))
-    sources = get_image_sources(ng_data)
+    sources = get_image_sources(ng_data, remove_zarr_protocol=True)
     a_zarr_uri = next(iter(sources.values()), None)
     if a_zarr_uri is None:
         raise ValueError("No image sources found in neuroglancer data")

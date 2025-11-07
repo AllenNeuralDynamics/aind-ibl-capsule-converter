@@ -503,7 +503,7 @@ class PipelineValidator:
             from aind_zarr_utils.neuroglancer import get_image_sources
 
             ng_data = get_json(str(self.paths.neuroglancer_file))
-            sources = get_image_sources(ng_data)
+            sources = get_image_sources(ng_data, remove_zarr_protocol=True)
 
             if not sources:
                 self._add_result(

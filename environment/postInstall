@@ -40,7 +40,7 @@ aind-mri-utils>=0.1.0
 aind-ephys-ibl-gui-conversion @ git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@main
 aind-registration-utils>=0.4,<0.5
 aind-s3-cache>=0.1
-aind-zarr-utils>=0.8
+aind-zarr-utils>=0.11.5
 REQ
 
 uv pip install --no-cache --system -r requirements.txt
