@@ -18,7 +18,7 @@ data_df = data_df[cols_selected]
 data_df = data_df.drop_duplicates()
 
 # %%
-col_to_attach = ['sorted', 'raw', 'stitched']
+col_to_attach = ['sorted', 'raw', 'stitched', 'raw_rec']
 
 # %%
 # Lists of strings for id and mount
