@@ -691,6 +691,9 @@ class PipelineValidator:
 
             # Check annotation file
             ext = "json" if mr.annotation_format == "json" else None
+            if np.isnan(mr.probe_file):
+                mr.probe_file = os.path.basename(self.paths.neuroglancer_file).split('.json')[0]
+                print(mr.probe_file)
             if ext:
                 pattern = f"*/{mr.probe_file}.{ext}"
                 matches = list(self.paths.data_root.glob(pattern))

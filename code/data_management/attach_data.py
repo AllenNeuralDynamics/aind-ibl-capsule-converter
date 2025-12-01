@@ -1,0 +1,54 @@
+# %%
+from codeocean.data_asset import DataAssetParams, DataAssetSearchParams,DataAssetAttachParams, Source, AWSS3Source
+import pandas as pd
+import os, sys
+from codeocean import CodeOcean
+client = CodeOcean(domain="https://codeocean.allenneuraldynamics.org", token=os.getenv("API_SECRET"))
+
+# %%
+# load and parse data ids
+script_dir = os.path.dirname(os.path.abspath(__file__))
+datalist_dir = os.path.join(script_dir, 'LC-NE_probe_annotation.csv')
+cols_selected = ['animal_id', 'stitched', 'sorted', 'raw_rec', 'raw']
+# datalist_dir = os.path.join(script_dir, 'session_assets.csv')
+# cols_selected = ['sorted', 'raw_data']
+data_df = pd.read_csv(datalist_dir)
+
+data_df = data_df[cols_selected]
+data_df = data_df.drop_duplicates()
+
+# %%
+col_to_attach = ['sorted', 'raw', 'stitched']
+
+# %%
+# Lists of strings for id and mount
+all_ids = []
+
+for curr_col in col_to_attach:
+    valid_inds = [True if isinstance(s, str) and 30 < len(s) < 40 else False for s in data_df[curr_col].to_list()]
+    curr_ids = list(data_df[valid_inds][curr_col].values)
+    all_ids.extend(curr_ids)
+all_ids = list(set(all_ids))
+#%%
+# all_ids = all_ids + ['f908dd4d-d7ed-4d52-97cf-ccd0e167c659']
+# all_mounts = all_mounts + ['all_behavior']
+
+# Generate the list of DataAssetAttachParams objects
+
+        
+# all_mounts = all_mounts_new
+data_assets = [DataAssetAttachParams(id) for id in all_ids]
+data_assets_id = all_ids
+
+# %%
+# Attach the generated list
+results = client.capsules.attach_data_assets(
+    capsule_id=os.getenv("CO_CAPSULE_ID"),
+    attach_params=data_assets,
+)
+print(f'Attached {len(data_assets_id)} data assets.')
+
+for data_asset in results:
+    print(f'{data_asset.id} mounted as {data_asset.mount}')
+
+# %%
