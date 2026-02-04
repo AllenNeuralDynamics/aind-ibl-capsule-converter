@@ -77,6 +77,7 @@ from pathlib import Path
 from typing import Any
 
 import ants
+import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 from aind_anatomical_utils.coordinate_systems import convert_coordinate_system
@@ -87,7 +88,9 @@ from aind_ephys_ibl_gui_conversion.ephys import (
 from aind_ephys_ibl_gui_conversion.histology import (
     create_slicer_fcsv,
 )
+from aind_registration_utils.annotations import expand_compacted_image
 from aind_registration_utils.ants import apply_ants_transforms_to_point_arr
+from ants.utils import to_sitk
 from aind_s3_cache.json_utils import get_json
 from aind_zarr_utils.neuroglancer import (
     neuroglancer_annotations_to_anatomical,
@@ -361,18 +364,10 @@ def _transform_ccf_to_image_space(
         correct_hist_domain_img=raw_hist_img,
         asset_info=asset_info,
     )
-    ccf_in_hist_img_tmp_dst = Path("/scratch/histology-ccf-in-mouse.nrrd")
     ccf_in_hist_img_path = outputs.histology_img / "ccf_in_mouse.nrrd"
-    ants.image_write(ccf_in_hist_img, str(ccf_in_hist_img_tmp_dst))
+    ccf_in_hist_sitk = to_sitk(ccf_in_hist_img)
     del ccf_in_hist_img
-    try:
-        _compress_reorient_nrrd_file(
-            ccf_in_hist_img_tmp_dst,
-            ccf_in_hist_img_path,
-            force_orientation=_BLESSED_DIRECTION,
-        )
-    finally:
-        ccf_in_hist_img_tmp_dst.unlink(missing_ok=True)
+    _convert_img_direction_and_write(ccf_in_hist_sitk, ccf_in_hist_img_path)
 
 
 def _transform_ccf_labels_to_image_space(
@@ -387,6 +382,9 @@ def _transform_ccf_labels_to_image_space(
         str(ref_paths.ccf_labels_lateralized_25),
         pixeltype=None,  # type: ignore
     )
+    unq_vals = np.load(str(ref_paths.ccf_labels_lateralized_25_unq_vals))[
+        "unique_labels"
+    ]
     ccf_labels_in_hist_img = _apply_ccf_inverse_tx_then_fix_domain(
         ccf_labels_lateralized_25,
         pipeline_space_fixed_img=pipeline_hist_domain_img,
@@ -395,25 +393,13 @@ def _transform_ccf_labels_to_image_space(
         interpolator="genericLabel",
     )
     del ccf_labels_lateralized_25
-    ccf_labels_in_hist_img_tmp_dst = Path(
-        "/scratch/histology-ccf-labels-in-mouse.nrrd"
-    )
+    ccf_labels_sitk = to_sitk(ccf_labels_in_hist_img)
+    del ccf_labels_in_hist_img
+    ccf_labels_expanded = expand_compacted_image(ccf_labels_sitk, unq_vals)
     ccf_labels_in_hist_img_path = (
         outputs.histology_img / "labels_in_mouse.nrrd"
     )
-    ants.image_write(
-        ccf_labels_in_hist_img,
-        str(ccf_labels_in_hist_img_tmp_dst),
-    )
-    del ccf_labels_in_hist_img
-    try:
-        _compress_reorient_nrrd_file(
-            ccf_labels_in_hist_img_tmp_dst,
-            ccf_labels_in_hist_img_path,
-            force_orientation=_BLESSED_DIRECTION,
-        )
-    finally:
-        ccf_labels_in_hist_img_tmp_dst.unlink(missing_ok=True)
+    _convert_img_direction_and_write(ccf_labels_expanded, ccf_labels_in_hist_img_path)
 
 
 # ---- Stage 7: per-row processing (probe-centric) -----------------------------
