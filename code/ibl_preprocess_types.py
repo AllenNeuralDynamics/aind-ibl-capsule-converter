@@ -44,6 +44,10 @@ class ReferencePaths:
         "ccf_2017_annotation_25_lateralized_compact.nrrd"
     )
     ibl_atlas_histology_path: Path = Path("/data/iblatlas_allenatlas/")
+    ccf_labels_lateralized_25_unq_vals: Path = Path(
+        "/data/allen_mouse_ccf_annotations_lateralized_compact/"
+        "ccf_2017_annotation_25_lateralized_unique_vals.npz"
+    )
 
 
 @dataclass(frozen=True)

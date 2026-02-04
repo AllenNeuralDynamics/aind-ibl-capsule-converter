@@ -87,6 +87,7 @@ from pathlib import Path
 from typing import Any
 
 import ants
+import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 from aind_anatomical_utils.coordinate_systems import convert_coordinate_system
@@ -95,7 +96,9 @@ from aind_ephys_ibl_gui_conversion.ephys import (
     extract_spikes,
 )
 from aind_ephys_ibl_gui_conversion.histology import create_slicer_fcsv
+from aind_registration_utils.annotations import expand_compacted_image
 from aind_registration_utils.ants import apply_ants_transforms_to_point_arr
+from ants.utils import to_sitk
 from aind_zarr_utils import neuroglancer_annotations_to_anatomical
 from aind_zarr_utils.pipeline_transformed import (
     base_and_pipeline_anatomical_stub,
@@ -573,21 +576,12 @@ async def _transform_ccf_to_image_space_async(
         limits=limits,
     )
     logger.debug("[CCF Transform] ANTs transform complete, writing output")
-    ccf_in_hist_img_tmp_dst = Path("/scratch/histology-ccf-in-mouse.nrrd")
     ccf_in_hist_img_path = outputs.histology_img / "ccf_in_mouse.nrrd"
-    await to_thread_logged(
-        ants.image_write, ccf_in_hist_img, str(ccf_in_hist_img_tmp_dst)
-    )
+    ccf_in_hist_sitk = await to_thread_logged(to_sitk, ccf_in_hist_img)
     del ccf_in_hist_img
-    try:
-        await _compress_reorient_nrrd_file_async(
-            ccf_in_hist_img_tmp_dst,
-            ccf_in_hist_img_path,
-            limits,
-            force_orientation=_BLESSED_DIRECTION,
-        )
-    finally:
-        ccf_in_hist_img_tmp_dst.unlink(missing_ok=True)
+    await _convert_img_to_direction_and_write_async(
+        ccf_in_hist_sitk, ccf_in_hist_img_path, limits
+    )
     logger.info(f"[CCF Transform] Completed: {ccf_in_hist_img_path.name}")
 
 
@@ -609,6 +603,9 @@ async def _transform_ccf_labels_to_image_space_async(
     logger.debug(
         "[CCF Labels] Applying ANTs inverse transform with genericLabel interpolation"
     )
+    unq_vals = np.load(str(ref_paths.ccf_labels_lateralized_25_unq_vals))[
+        "unique_labels"
+    ]
     ccf_labels_in_hist_img = await _apply_ccf_inverse_tx_then_fix_domain_async(
         ccf_labels_lateralized_25,
         pipeline_space_fixed_img=pipeline_hist_domain_img,
@@ -617,29 +614,17 @@ async def _transform_ccf_labels_to_image_space_async(
         limits=limits,
         interpolator="genericLabel",
     )
-    logger.debug("[CCF Labels] ANTs transform complete, writing output")
+    logger.debug("[CCF Labels] ANTs transform complete, expanding labels")
     del ccf_labels_lateralized_25
-    ccf_labels_in_hist_img_tmp_dst = Path(
-        "/scratch/histology-ccf-labels-in-mouse.nrrd"
-    )
+    ccf_labels_sitk = await to_thread_logged(to_sitk, ccf_labels_in_hist_img)
+    del ccf_labels_in_hist_img
+    ccf_labels_expanded = expand_compacted_image(ccf_labels_sitk, unq_vals)
     ccf_labels_in_hist_img_path = (
         outputs.histology_img / "labels_in_mouse.nrrd"
     )
-    await to_thread_logged(
-        ants.image_write,
-        ccf_labels_in_hist_img,
-        str(ccf_labels_in_hist_img_tmp_dst),
+    await _convert_img_to_direction_and_write_async(
+        ccf_labels_expanded, ccf_labels_in_hist_img_path, limits
     )
-    del ccf_labels_in_hist_img
-    try:
-        await _compress_reorient_nrrd_file_async(
-            ccf_labels_in_hist_img_tmp_dst,
-            ccf_labels_in_hist_img_path,
-            limits,
-            force_orientation=_BLESSED_DIRECTION,
-        )
-    finally:
-        ccf_labels_in_hist_img_tmp_dst.unlink(missing_ok=True)
     logger.info(f"[CCF Labels] Completed: {ccf_labels_in_hist_img_path.name}")
 
 
