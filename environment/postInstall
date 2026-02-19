@@ -28,19 +28,5 @@ wavpack --version
 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-cat > requirements.txt <<'REQ'
-numpy>=1.21.0
-pandas>=1.3.0
-matplotlib>=3.5.0
-zarr>=2.10.0
-antspyx>=0.3.0
-iblatlas>=0.4.0
-aind-anatomical-utils>=0.4,<0.5
-aind-mri-utils>=0.1.0
-aind-ephys-ibl-gui-conversion @ git+https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion@main
-aind-registration-utils>=0.4,<0.5
-aind-s3-cache>=0.1
-aind-zarr-utils>=0.11.5
-REQ
-
-uv pip install --no-cache --system -r requirements.txt
+uv pip install --no-cache --system \
+  "aind-ibl-ephys-alignment-preprocessing @ git+https://github.com/AllenNeuralDynamics/aind-ibl-ephys-alignment-preprocessing@main"
