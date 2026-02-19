@@ -22,7 +22,7 @@ try:
                 "fsspec LocalFileOpener.closed called with f=None\n%s",
                 "".join(traceback.format_stack(limit=50))
             )
-            return True  # also make it defensive so it doesn’t crash
+            return True  # also make it defensive so it doesn't crash
         return f.closed
 
     if isinstance(_orig_closed, property):
@@ -40,8 +40,8 @@ try:
 except Exception:
     pass
 
-# Hand over to your script (preserve args)
-sys.argv[0] = "extract_ephys_and_hist_async.py"
-from extract_ephys_and_hist_async import main  # adjust if your entry is different
+# Hand over to main (which dispatches to library)
+sys.argv[0] = "main.py"
+from main import main  # noqa: E402
 if __name__ == "__main__":
     raise SystemExit(main())
