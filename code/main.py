@@ -7,14 +7,16 @@ import os
 import sys
 from pathlib import Path
 
-from extract_ephys_hist_core import parse_and_normalize_args, resolve_paths
 from aind_ibl_ephys_alignment_preprocessing.types import PipelineConfig
+from extract_ephys_hist_core import parse_and_normalize_args, resolve_paths
 
 
 def main() -> None:
     """Parse CLI args, build PipelineConfig, and dispatch to library."""
     print("whoami:", os.geteuid() if hasattr(os, "geteuid") else "n/a")
-    print("HOME:", os.environ.get("HOME"), "expanduser:", os.path.expanduser("~"))
+    print(
+        "HOME:", os.environ.get("HOME"), "expanduser:", os.path.expanduser("~")
+    )
     print("exe:", sys.executable)
     print("cwd:", os.getcwd())
     print("sys.path[0:3]:", sys.path[:3])
@@ -32,7 +34,9 @@ def main() -> None:
     )
 
     if args.validate_only:
-        from aind_ibl_ephys_alignment_preprocessing.validation import PipelineValidator
+        from aind_ibl_ephys_alignment_preprocessing.validation import (
+            PipelineValidator,
+        )
 
         validator = PipelineValidator(config)
         results = validator.validate_all()
@@ -40,11 +44,15 @@ def main() -> None:
         sys.exit(0 if not validator.has_errors(results) else 1)
 
     if args.run_async:
-        from aind_ibl_ephys_alignment_preprocessing._async.pipeline import run_pipeline_async
+        from aind_ibl_ephys_alignment_preprocessing._async.pipeline import (
+            run_pipeline_async,
+        )
 
         asyncio.run(run_pipeline_async(config))
     else:
-        from aind_ibl_ephys_alignment_preprocessing.pipeline import run_pipeline
+        from aind_ibl_ephys_alignment_preprocessing.pipeline import (
+            run_pipeline,
+        )
 
         run_pipeline(config)
 
