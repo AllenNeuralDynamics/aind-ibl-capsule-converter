@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"base_image": "codeocean/code-server-python-extensions-pack:code-server4.101.2python3.12.4aind-metadata-mcp0.4.2",
+	"base_image": "codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04",
 	"post_install": true,
 	"options": {
 		"registry_host_arg": true,
@@ -20,7 +20,7 @@
 				},
 				{
 					"name": "curl",
-					"version": "7.81.0-1ubuntu1.21"
+					"version": "7.81.0-1ubuntu1.23"
 				},
 				{
 					"name": "debhelper"
@@ -36,7 +36,7 @@
 				},
 				{
 					"name": "git",
-					"version": "1:2.34.1-1ubuntu1.15"
+					"version": "1:2.34.1-1ubuntu1.17"
 				},
 				{
 					"name": "pkg-config"
