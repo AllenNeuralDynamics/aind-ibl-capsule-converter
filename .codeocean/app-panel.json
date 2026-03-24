@@ -24,17 +24,6 @@
 			"required": true
 		},
 		{
-			"id": "y85wOvRSQfUyOJmd",
-			"name": "update_packages_from_source",
-			"param_name": "update_packages_from_source",
-			"description": "Always use the latest commit of github repo",
-			"help_text": "If 1, every run will install a python package from source repo https://github.com/AllenNeuralDynamics/aind-ephys-ibl-gui-conversion at HEAD on main ",
-			"type": "text",
-			"value_type": "integer",
-			"default_value": "1",
-			"maximum": 1
-		},
-		{
 			"id": "7zOttIl2hWvsToR1",
 			"name": "Skip ephys",
 			"param_name": "skip-ephys",
