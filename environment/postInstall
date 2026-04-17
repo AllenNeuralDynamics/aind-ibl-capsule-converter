@@ -3,9 +3,6 @@ set -Eeuo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends \
-  build-essential devscripts debhelper equivs fakeroot dpkg-dev \
-  curl ca-certificates git pkg-config
 
 # Install wavpack 5.8.1 from debian package
 workdir="$(mktemp -d)"
