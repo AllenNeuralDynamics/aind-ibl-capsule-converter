@@ -11,11 +11,11 @@ apt-get install -y --no-install-recommends \
 workdir="$(mktemp -d)"
 pushd "$workdir"
 
-dget -u https://deb.debian.org/debian/pool/main/w/wavpack/wavpack_5.8.1-1.dsc
-cd wavpack-5.8.1
+dget -u https://deb.debian.org/debian/pool/main/w/wavpack/wavpack_5.9.0-1.dsc
+cd wavpack-5.9.0
 mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
 DEB_BUILD_OPTIONS=nocheck debuild -us -uc -b
-apt-get install -y ../wavpack_5.8.1-1_*.deb ../libwavpack1_5.8.1-1_*.deb ../libwavpack-dev_5.8.1-1_*.deb
+apt-get install -y ../wavpack_5.9.0-1_*.deb ../libwavpack1_5.9.0-1_*.deb ../libwavpack-dev_5.9.0-1_*.deb
 
 popd
 
