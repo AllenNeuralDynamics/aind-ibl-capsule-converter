@@ -6,6 +6,10 @@
 			"mount": "ecephys_781370_2025-05-30_15-52-48_sorted_2025-10-01_07-00-38"
 		},
 		{
+			"id": "29b472e9-3d67-4bf6-bd93-2d5fb49f78bf",
+			"mount": "ibl_manifest_791094"
+		},
+		{
 			"id": "30bf0bcc-6467-4b49-a177-a1a1424ff1f6",
 			"mount": "smartspim_lca_template"
 		},
@@ -18,12 +22,20 @@
 			"mount": "iblatlas_allenatlas"
 		},
 		{
+			"id": "77902630-82d3-4b50-b2e2-7d931dafd9a0",
+			"mount": "ecephys_791094_2025-10-08_16-48-57_sorted_2026-04-24_13-43-00"
+		},
+		{
 			"id": "79bf9032-5cff-4038-b2b8-8a24fa098e3b",
 			"mount": "allen_mouse_ccf"
 		},
 		{
 			"id": "a0740a1c-1c54-47ee-b9d7-b215511ebb3d",
 			"mount": "allen_mouse_ccf_annotations_lateralized_compact"
+		},
+		{
+			"id": "c06a9fae-3e31-495b-aaea-3ae4de714606",
+			"mount": "ecephys_791094_2025-10-08_16-48-57"
 		},
 		{
 			"id": "d29c8b22-758f-424f-bd17-9ac98d43d9d4",
@@ -36,6 +48,10 @@
 		{
 			"id": "e2361fc2-6ee9-4b92-b959-c0a5f7a9b749",
 			"mount": "781370_manifest"
+		},
+		{
+			"id": "fa97a159-de56-439e-b672-e63114133428",
+			"mount": "SmartSPIM_791094_2025-11-12_16-36-24_stitched_2025-11-14_09-36-04"
 		}
 	]
 }
