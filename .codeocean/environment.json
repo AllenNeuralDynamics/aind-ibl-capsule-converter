@@ -1,0 +1,49 @@
+{
+	"version": 1,
+	"base_image": "codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04",
+	"options": {
+		"registry_host_arg": true,
+		"git_ask_pass": true,
+		"mount_secrets": true
+	},
+	"installers": {
+		"apt": {
+			"packages": [
+				{
+					"name": "build-essential"
+				},
+				{
+					"name": "ca-certificates"
+				},
+				{
+					"name": "curl"
+				},
+				{
+					"name": "debhelper"
+				},
+				{
+					"name": "devscripts"
+				},
+				{
+					"name": "dpkg-dev"
+				},
+				{
+					"name": "equivs"
+				},
+				{
+					"name": "fakeroot"
+				},
+				{
+					"name": "git"
+				},
+				{
+					"name": "pkg-config"
+				},
+				{
+					"name": "tree"
+				}
+			],
+			"install_software_properties_common": true
+		}
+	}
+}
