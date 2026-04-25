@@ -23,8 +23,7 @@
 					"version": "7.81.0-1ubuntu1.23"
 				},
 				{
-					"name": "debhelper",
-					"version": "13.6ubuntu1"
+					"name": "debhelper"
 				},
 				{
 					"name": "devscripts",
@@ -39,8 +38,7 @@
 					"version": "2.3.1"
 				},
 				{
-					"name": "fakeroot",
-					"version": "1.28-1ubuntu1"
+					"name": "fakeroot"
 				},
 				{
 					"name": "git",
