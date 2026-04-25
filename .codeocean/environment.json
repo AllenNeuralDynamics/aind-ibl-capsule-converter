@@ -10,37 +10,48 @@
 		"apt": {
 			"packages": [
 				{
-					"name": "build-essential"
+					"name": "build-essential",
+					"version": "12.9ubuntu3"
 				},
 				{
-					"name": "ca-certificates"
+					"name": "ca-certificates",
+					"version": "20240203~22.04.1"
 				},
 				{
-					"name": "curl"
+					"name": "curl",
+					"version": "7.81.0-1ubuntu1.23"
 				},
 				{
-					"name": "debhelper"
+					"name": "debhelper",
+					"version": "13.6ubuntu1"
 				},
 				{
-					"name": "devscripts"
+					"name": "devscripts",
+					"version": "2.22.1ubuntu1.2"
 				},
 				{
-					"name": "dpkg-dev"
+					"name": "dpkg-dev",
+					"version": "1.21.1ubuntu2.6"
 				},
 				{
-					"name": "equivs"
+					"name": "equivs",
+					"version": "2.3.1"
 				},
 				{
-					"name": "fakeroot"
+					"name": "fakeroot",
+					"version": "1.28-1ubuntu1"
 				},
 				{
-					"name": "git"
+					"name": "git",
+					"version": "1:2.34.1-1ubuntu1.17"
 				},
 				{
-					"name": "pkg-config"
+					"name": "pkg-config",
+					"version": "0.29.2-1ubuntu3"
 				},
 				{
-					"name": "tree"
+					"name": "tree",
+					"version": "2.0.2-1"
 				}
 			],
 			"install_software_properties_common": true

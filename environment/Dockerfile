@@ -1,4 +1,4 @@
-# hash:sha256:d89caaa19e5102e4a105740b441811ba86c1e2adc919b8cc2acf1033c9856871
+# hash:sha256:79652bbbdef8fc7d64d190fa57b6f6ce85adce02f720877c14eb15c48465c3a8
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
 
@@ -8,15 +8,15 @@ COPY git-ask-pass /
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
-        ca-certificates \
-        curl \
-        debhelper \
-        devscripts \
-        dpkg-dev \
-        equivs \
-        fakeroot \
-        git \
-        pkg-config \
-        tree \
+        build-essential=12.9ubuntu3 \
+        ca-certificates=20240203~22.04.1 \
+        curl=7.81.0-1ubuntu1.23 \
+        debhelper=13.6ubuntu1 \
+        devscripts=2.22.1ubuntu1.2 \
+        dpkg-dev=1.21.1ubuntu2.6 \
+        equivs=2.3.1 \
+        fakeroot=1.28-1ubuntu1 \
+        git=1:2.34.1-1ubuntu1.17 \
+        pkg-config=0.29.2-1ubuntu3 \
+        tree=2.0.2-1 \
     && rm -rf /var/lib/apt/lists/*
