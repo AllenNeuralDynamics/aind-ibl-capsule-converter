@@ -2,12 +2,12 @@
 	"version": 1,
 	"attached_datasets": [
 		{
-			"id": "1e3581cd-a80f-40b5-a887-ef5c50385d78",
-			"mount": "ecephys_781370_2025-05-30_15-52-48_sorted_2025-10-01_07-00-38"
+			"id": "05fc8df9-2e53-43e0-a105-2334223f2046",
+			"mount": "alignment-manifest_791094_2026-04-25_13-08-00"
 		},
 		{
-			"id": "29b472e9-3d67-4bf6-bd93-2d5fb49f78bf",
-			"mount": "ibl_manifest_791094"
+			"id": "1e3581cd-a80f-40b5-a887-ef5c50385d78",
+			"mount": "ecephys_781370_2025-05-30_15-52-48_sorted_2025-10-01_07-00-38"
 		},
 		{
 			"id": "30bf0bcc-6467-4b49-a177-a1a1424ff1f6",
@@ -28,6 +28,14 @@
 		{
 			"id": "79bf9032-5cff-4038-b2b8-8a24fa098e3b",
 			"mount": "allen_mouse_ccf"
+		},
+		{
+			"id": "7d29045e-2d2f-4d4b-a40f-0719aff0113b",
+			"mount": "ecephys_791094_2025-10-09_14-26-31"
+		},
+		{
+			"id": "9d137ff6-845b-4d04-9b9d-3401a5b3e9f5",
+			"mount": "ecephys_791094_2025-10-09_sorted_2026-04-23_14-11-00"
 		},
 		{
 			"id": "a0740a1c-1c54-47ee-b9d7-b215511ebb3d",
