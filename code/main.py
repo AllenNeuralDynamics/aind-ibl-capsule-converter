@@ -33,15 +33,17 @@ def main() -> None:
         skip_ephys=args.skip_ephys,
     )
 
-    if args.validate_only:
-        from aind_ibl_ephys_alignment_preprocessing.validation import (
-            PipelineValidator,
-        )
+    from aind_ibl_ephys_alignment_preprocessing.validation import (
+        PipelineValidator,
+    )
 
-        validator = PipelineValidator(config)
-        results = validator.validate_all()
-        validator.print_summary(results)
-        sys.exit(0 if not validator.has_errors(results) else 1)
+    validator = PipelineValidator(config)
+    results = validator.validate_all()
+    validator.print_summary(results)
+    if validator.has_errors(results):
+        sys.exit(1)
+    if args.validate_only:
+        sys.exit(0)
 
     if args.run_async:
         from aind_ibl_ephys_alignment_preprocessing._async.pipeline import (
