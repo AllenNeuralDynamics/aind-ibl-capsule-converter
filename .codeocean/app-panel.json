@@ -10,8 +10,7 @@
 			"help_text": "Annotation manifest (1 row per recording) paring annotated probe tracks with recording data.",
 			"type": "text",
 			"value_type": "string",
-			"default_value": "713506_test.csv",
-			"required": true
+			"default_value": "713506_test.csv"
 		},
 		{
 			"id": "b4Jig8tch5Xt5NTw",
@@ -20,8 +19,7 @@
 			"description": "Histology annotations of probe tracks",
 			"help_text": "Json file with probe annotations from neuroglancer",
 			"type": "text",
-			"value_type": "string",
-			"required": true
+			"value_type": "string"
 		},
 		{
 			"id": "7zOttIl2hWvsToR1",
