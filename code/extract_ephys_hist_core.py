@@ -24,15 +24,19 @@ def parse_args():
     parser.add_argument(
         "--manifest",
         dest="annotation_manifest",
-        default="729293/Manifest_Day1_2_729293 1.csv",
-        help="Probe Annotations",
+        default=None,
+        help=(
+            "Path (relative to /data) to the manifest CSV. "
+            "If omitted, the capsule prints usage and exits 0 — this is the "
+            "release-time reproducible-run path with no assets attached."
+        ),
     )
 
     parser.add_argument(
         "--neuroglancer",
         dest="neuroglancer",
-        default="Probes_561_729293_Day1and2.json",
-        help="Directory containing probe annotations",
+        default=None,
+        help="Path (relative to /data) to the Neuroglancer probe JSON.",
     )
 
     parser.add_argument(

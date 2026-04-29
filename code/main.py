@@ -22,6 +22,35 @@ def main() -> None:
     print("sys.path[0:3]:", sys.path[:3])
 
     args = parse_and_normalize_args()
+
+    if args.annotation_manifest is None and args.neuroglancer is None:
+        print(
+            "No --manifest or --neuroglancer provided; nothing to do.\n"
+            "\n"
+            "This capsule converts AIND Neuroglancer histology + ephys data\n"
+            "into IBL ALF format. To process data, attach the input assets\n"
+            "and set both parameters in the app panel:\n"
+            "  --manifest      path (relative to /data) to the manifest CSV\n"
+            "  --neuroglancer  path (relative to /data) to the Neuroglancer\n"
+            "                  probe JSON\n"
+            "See README.md for the manifest format and required assets.\n"
+            "\n"
+            "Exiting 0 so a reproducible run with no assets attached "
+            "succeeds (release gate).",
+        )
+        sys.exit(0)
+
+    if args.annotation_manifest is None or args.neuroglancer is None:
+        missing = (
+            "--manifest" if args.annotation_manifest is None else "--neuroglancer"
+        )
+        print(
+            f"Error: {missing} not set. Both --manifest and --neuroglancer "
+            "must be provided to run the conversion.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     paths = resolve_paths(args)
 
     config = PipelineConfig(

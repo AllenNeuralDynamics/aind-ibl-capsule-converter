@@ -27,8 +27,8 @@ from aind_ibl_ephys_alignment_preprocessing.types import (  # noqa: F401
 class Args:
     """Capsule-only CLI arguments."""
 
-    neuroglancer: str
-    annotation_manifest: str
+    neuroglancer: str | None
+    annotation_manifest: str | None
     skip_ephys: bool = False
     validate_only: bool = False
     run_async: bool = True
