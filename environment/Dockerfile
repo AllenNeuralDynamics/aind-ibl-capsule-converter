@@ -1,6 +1,6 @@
-# hash:sha256:2dc1fceaecbfa7b89952b3c5ef3bf30c385bbe3d60d6afd4ac869ab0ecfd441b
+# hash:sha256:6d9acec1bf01a2cefe5c67e8a06fe0ff4078b26572fdd0bc2e9bf0acc5125ece
 ARG REGISTRY_HOST
-FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
+FROM $REGISTRY_HOST/codeocean/python-slim-uv:main-5692e50
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG GIT_ASKPASS
@@ -8,17 +8,11 @@ COPY git-ask-pass /
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
-        ca-certificates \
-        curl \
-        debhelper \
-        devscripts \
-        dpkg-dev \
-        equivs \
-        fakeroot \
-        git \
-        pkg-config \
-        tree \
+        build-essential=12.12 \
+        libwavpack-dev=5.8.1-1 \
+        libwavpack1=5.8.1-1 \
+        tree=2.2.1-1 \
+        wavpack=5.8.1-1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY postInstall /

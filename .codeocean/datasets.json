@@ -10,16 +10,40 @@
 			"mount": "iblatlas_allenatlas"
 		},
 		{
+			"id": "77902630-82d3-4b50-b2e2-7d931dafd9a0",
+			"mount": "ecephys_791094_2025-10-08_16-48-57_sorted_2026-04-24_13-43-00"
+		},
+		{
 			"id": "79bf9032-5cff-4038-b2b8-8a24fa098e3b",
 			"mount": "allen_mouse_ccf"
+		},
+		{
+			"id": "7d29045e-2d2f-4d4b-a40f-0719aff0113b",
+			"mount": "ecephys_791094_2025-10-09_14-26-31"
+		},
+		{
+			"id": "9d137ff6-845b-4d04-9b9d-3401a5b3e9f5",
+			"mount": "ecephys_791094_2025-10-09_sorted_2026-04-23_14-11-00"
 		},
 		{
 			"id": "a0740a1c-1c54-47ee-b9d7-b215511ebb3d",
 			"mount": "allen_mouse_ccf_annotations_lateralized_compact"
 		},
 		{
+			"id": "ba3d4383-ef12-4cae-86e3-65d31b08f126",
+			"mount": "alignment-manifest_791094_2026-04-26_15-39-00"
+		},
+		{
+			"id": "c06a9fae-3e31-495b-aaea-3ae4de714606",
+			"mount": "ecephys_791094_2025-10-08_16-48-57"
+		},
+		{
 			"id": "d5f9aaf7-a8c2-4f74-95de-13e86ae95ae9",
 			"mount": "spim_template_to_ccf"
+		},
+		{
+			"id": "fa97a159-de56-439e-b672-e63114133428",
+			"mount": "SmartSPIM_791094_2025-11-12_16-36-24_stitched_2025-11-14_09-36-04"
 		}
 	]
 }

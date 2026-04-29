@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"base_image": "codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04",
+	"base_image": "codeocean/python-slim-uv:main-5692e50",
 	"post_install": true,
 	"options": {
 		"registry_host_arg": true,
@@ -11,40 +11,28 @@
 		"apt": {
 			"packages": [
 				{
-					"name": "build-essential"
+					"name": "build-essential",
+					"version": "12.12"
 				},
 				{
-					"name": "ca-certificates"
+					"name": "libwavpack-dev",
+					"version": "5.8.1-1"
 				},
 				{
-					"name": "curl"
+					"name": "libwavpack1",
+					"version": "5.8.1-1"
 				},
 				{
-					"name": "debhelper"
+					"name": "tree",
+					"version": "2.2.1-1"
 				},
 				{
-					"name": "devscripts"
-				},
-				{
-					"name": "dpkg-dev"
-				},
-				{
-					"name": "equivs"
-				},
-				{
-					"name": "fakeroot"
-				},
-				{
-					"name": "git"
-				},
-				{
-					"name": "pkg-config"
-				},
-				{
-					"name": "tree"
+					"name": "wavpack",
+					"version": "5.8.1-1"
 				}
 			],
-			"install_software_properties_common": true
+			"install_software_properties_common": true,
+			"install_gnupg": true
 		}
 	}
 }
