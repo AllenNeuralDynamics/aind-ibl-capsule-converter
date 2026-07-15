@@ -1,4 +1,4 @@
-# hash:sha256:5cec88c9cb36b872d4e1fa15dfd9c68a3c45037db4268e5335b10ab333d1bdae
+# hash:sha256:84ff28fd0676d3d8f546aa51293f95cbc9117bc57501ddd69ae3b533e5799ac1
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/code-server-python-extensions-pack:code-server4.101.2python3.12.4aind-metadata-mcp0.4.2
 
@@ -19,6 +19,9 @@ RUN apt-get update \
         pkg-config \
         tree=2.0.2-1 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN pip install -U --no-cache-dir \
+    codeocean==0.12.0
 
 COPY postInstall /
 RUN --mount=type=secret,id=secrets . /run/secrets/secrets \

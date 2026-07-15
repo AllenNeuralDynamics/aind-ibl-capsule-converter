@@ -9,16 +9,17 @@ client = CodeOcean(domain="https://codeocean.allenneuraldynamics.org", token=os.
 # load and parse data ids
 script_dir = os.path.dirname(os.path.abspath(__file__))
 datalist_dir = os.path.join(script_dir, 'LC-NE_probe_annotation.csv')
-cols_selected = ['animal_id', 'stitched', 'sorted', 'raw_rec', 'raw']
-# datalist_dir = os.path.join(script_dir, 'session_assets.csv')
-# cols_selected = ['sorted', 'raw_data']
+cols_selected = ['animal_id', 'stitched_smartspim', 'sorted', 'raw', 'raw_smartspim']
+datalist_dir = os.path.join(script_dir, 'session_assets.csv')
+cols_selected = ['sorted', 'raw_data']
 data_df = pd.read_csv(datalist_dir)
 
 data_df = data_df[cols_selected]
 data_df = data_df.drop_duplicates()
 
 # %%
-col_to_attach = ['sorted', 'raw', 'stitched', 'raw_rec']
+col_to_attach = ['sorted', 'raw_smartspim', 'stitched_smartspim', 'raw']
+col_to_attach = ['sorted']
 
 # %%
 # Lists of strings for id and mount

@@ -11,6 +11,7 @@ DATA_DIR="${DATA_DIR:-/data}"
 RESULTS_DIR="${RESULTS_DIR:-/results}"
 ATTACHED_LIST="${ATTACHED_LIST:-$RESULTS_DIR/attached_data.txt}"
 ENTRYPOINT="${ENTRYPOINT:-/root/capsule/code/main.py}"
+# ENTRYPOINT="${ENTRYPOINT:-/root/capsule/code/data_management/attach_data.py}"
 
 # --- sanity checks ------------------------------------------------------------
 command -v "$PYTHON" >/dev/null || { echo "Error: $PYTHON not found" >&2; exit 127; }

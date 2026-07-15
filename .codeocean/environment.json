@@ -47,6 +47,16 @@
 				}
 			],
 			"install_software_properties_common": true
+		},
+		"pip": {
+			"packages": [
+				{
+					"name": "codeocean",
+					"version": "0.12.0"
+				}
+			],
+			"options": {},
+			"pre_install_options": {}
 		}
 	}
 }
