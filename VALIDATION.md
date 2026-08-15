@@ -113,7 +113,6 @@ Validates the SmartSPIM asset structure discovered from Neuroglancer file:
 - Asset path exists under `/data/`
 - `image_tile_fusing/OMEZarr/` directory with `.zarr` channels
 - `image_atlas_alignment/` directory with registration outputs
-- Precomputed registration: `moved_ls_to_ccf.nii.gz`
 - Transform files: `*_0GenericAffine.mat`, `*_1InverseWarp.nii.gz`
 
 **Common issues:**
@@ -129,7 +128,7 @@ ls /data/<asset-id>/image_tile_fusing/OMEZarr/
 ls /data/<asset-id>/image_atlas_alignment/
 
 # Look for registration channel folder
-ls /data/<asset-id>/image_atlas_alignment/*/moved_ls_to_ccf.nii.gz
+ls -d /data/<asset-id>/image_atlas_alignment/*/
 ```
 
 ### 5. Per-Probe Files ✓
@@ -285,7 +284,7 @@ awk -F',' '$1 == "729293"' manifest.csv > manifest_729293.csv
 **Fix:**
 1. Check `image_atlas_alignment/` directory exists under asset
 2. Look for subdirectories (one per channel)
-3. Verify `moved_ls_to_ccf.nii.gz` exists in registration channel folder
+3. Verify the affine and inverse-warp transforms exist in that folder
 4. If missing, re-run the registration pipeline
 
 ### "Insufficient disk space"
